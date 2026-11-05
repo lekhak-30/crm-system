@@ -1,5 +1,6 @@
+
 import { useState } from 'react'
-import { NavLink, Outlet } from 'react-router-dom'
+import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard,
   Users,
@@ -9,20 +10,73 @@ import {
   ChartNoAxesCombined,
   Menu,
   X,
+  LogOut,
 } from 'lucide-react'
+import { useAuth } from '../context/AuthContext'
+
 
 const navigation = [
-  { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
-  { name: 'Customers', path: '/customers', icon: Users },
-  { name: 'Leads', path: '/leads', icon: UserRoundPlus },
-  { name: 'Sales Pipeline', path: '/opportunities', icon: Target },
-  { name: 'Activities', path: '/activities', icon: CalendarCheck },
-  { name: 'Reports', path: '/reports', icon: ChartNoAxesCombined },
-  { name: 'Team Members', path: '/users', icon: Users },
+  {
+    name: 'Dashboard',
+    path: '/dashboard',
+    icon: LayoutDashboard,
+    roles: ['Administrator', 'Sales Manager', 'Sales Employee'],
+  },
+  {
+    name: 'Customers',
+    path: '/customers',
+    icon: Users,
+    roles: ['Administrator', 'Sales Manager', 'Sales Employee'],
+  },
+  {
+    name: 'Leads',
+    path: '/leads',
+    icon: UserRoundPlus,
+    roles: ['Administrator', 'Sales Manager', 'Sales Employee'],
+  },
+  {
+    name: 'Sales Pipeline',
+    path: '/opportunities',
+    icon: Target,
+    roles: ['Administrator', 'Sales Manager'],
+  },
+  {
+    name: 'Activities',
+    path: '/activities',
+    icon: CalendarCheck,
+    roles: ['Administrator', 'Sales Manager', 'Sales Employee'],
+  },
+  {
+    name: 'Reports',
+    path: '/reports',
+    icon: ChartNoAxesCombined,
+    roles: ['Administrator', 'Sales Manager'],
+  },
+  {
+    name: 'Team Members',
+    path: '/users',
+    icon: Users,
+    roles: ['Administrator'],
+  },
 ]
+
 
 function DashboardLayout() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const { user, logout } = useAuth()
+  const navigate = useNavigate()
+
+  const handleLogout = () => {
+    logout()
+    navigate('/login', { replace: true })
+  }
+
+  const displayName = user?.name || 'User'
+  const displayRole = user?.role || 'Employee'
+  const initial = displayName.charAt(0).toUpperCase()
+  const visibleNavigation = navigation.filter((item) =>
+  item.roles.includes(user?.role)
+)
 
   const sidebarContent = (
     <>
@@ -45,7 +99,7 @@ function DashboardLayout() {
           Main Menu
         </p>
 
-        {navigation.map((item) => {
+        {visibleNavigation.map((item) => {
           const Icon = item.icon
 
           return (
@@ -72,7 +126,6 @@ function DashboardLayout() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-
       <aside className="fixed inset-y-0 left-0 z-20 hidden w-64 border-r border-slate-200 bg-white md:block">
         {sidebarContent}
       </aside>
@@ -92,9 +145,7 @@ function DashboardLayout() {
       )}
 
       <div className="md:ml-64">
-
-        <header className="flex h-16 items-center justify-between border-b border-slate-200 bg-white px-6">
-
+        <header className="flex h-16 items-center justify-between border-b border-slate-200 bg-white px-4 sm:px-6">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setMobileMenuOpen(true)}
@@ -110,26 +161,33 @@ function DashboardLayout() {
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="text-right">
+            <div className="hidden text-right sm:block">
               <p className="text-sm font-semibold text-slate-700">
-                Admin User
+                {displayName}
               </p>
               <p className="text-xs text-slate-400">
-                Administrator
+                {displayRole}
               </p>
             </div>
 
             <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-100 font-semibold text-blue-700">
-              A
+              {initial}
             </div>
-          </div>
 
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-red-50 hover:text-red-600"
+              title="Logout"
+            >
+              <LogOut size={17} />
+              <span className="hidden sm:inline">Logout</span>
+            </button>
+          </div>
         </header>
 
         <main className="p-4 sm:p-6">
           <Outlet />
         </main>
-
       </div>
     </div>
   )
