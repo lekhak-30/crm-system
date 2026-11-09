@@ -3,46 +3,64 @@ import { useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import {
   LockKeyhole,
-  Mail,
+  User,
   Eye,
   EyeOff,
   BriefcaseBusiness,
 } from 'lucide-react'
+
 import { useAuth } from '../../context/AuthContext'
 
 function Login() {
   const [showPassword, setShowPassword] = useState(false)
-  const [email, setEmail] = useState('')
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
-  
-  const { user, login } = useAuth()
-  const navigate = useNavigate()
-  const [role, setRole] = useState('Administrator')
+  const [submitting, setSubmitting] = useState(false)
 
-  // Redirect users who are already logged in.
+  const { user, loading, login } = useAuth()
+  const navigate = useNavigate()
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <p className="text-sm text-slate-500">
+          Checking your session...
+        </p>
+      </div>
+    )
+  }
+
   if (user) {
     return <Navigate to="/dashboard" replace />
   }
 
-  const handleSubmit = (event) => {
-  event.preventDefault()
-  setError('')
+  const handleSubmit = async (event) => {
+    event.preventDefault()
+    setError('')
 
-  if (!email.trim() || !password.trim()) {
-    setError('Please enter both your email and password.')
-    return
+    if (!username.trim() || !password) {
+      setError('Please enter your username and password.')
+      return
+    }
+
+    setSubmitting(true)
+
+    try {
+      const result = await login(username, password)
+
+      if (!result.success) {
+        setError(result.message)
+        return
+      }
+
+      navigate('/dashboard', { replace: true })
+    } catch {
+      setError('Unable to sign in. Please try again.')
+    } finally {
+      setSubmitting(false)
+    }
   }
-
-  const result = login(email, password, role)
-
-  if (!result.success) {
-    setError(result.message)
-    return
-  }
-
-  navigate('/dashboard', { replace: true })
-}
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-100 px-4 py-10">
@@ -56,7 +74,9 @@ function Login() {
                 <BriefcaseBusiness size={28} />
               </div>
 
-              <span className="text-2xl font-bold">CRM System</span>
+              <span className="text-2xl font-bold">
+                CRM System
+              </span>
             </div>
 
             <div className="mt-24">
@@ -79,6 +99,7 @@ function Login() {
         {/* Login form */}
         <div className="flex items-center justify-center p-6 sm:p-10">
           <div className="w-full max-w-md">
+
             <div className="mb-8">
               <div className="mb-5 inline-flex rounded-xl bg-blue-50 p-3 text-blue-600 md:hidden">
                 <BriefcaseBusiness size={28} />
@@ -94,56 +115,36 @@ function Login() {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-5">
-              {/* Email */}
+
+              {/* Username */}
               <div>
                 <label
-                  htmlFor="email"
+                  htmlFor="username"
                   className="mb-2 block text-sm font-medium text-slate-700"
                 >
-                  Email address
+                  Username
                 </label>
 
                 <div className="relative">
-                  <Mail
+                  <User
                     size={18}
                     className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
                   />
 
                   <input
-                    id="email"
-                    type="email"
-                    value={email}
-                    onChange={(event) => setEmail(event.target.value)}
-                    placeholder="name@company.com"
+                    id="username"
+                    type="text"
+                    value={username}
+                    onChange={(event) => setUsername(event.target.value)}
+                    placeholder="Enter your username"
                     autoComplete="username"
                     required
+                    disabled={submitting}
                     className="w-full rounded-lg border border-slate-200 py-3 pl-10 pr-4 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                   />
                 </div>
               </div>
-<div>
-  <label
-    htmlFor="role"
-    className="mb-2 block text-sm font-medium text-slate-700"
-  >
-    Demo role
-  </label>
 
-  <select
-    id="role"
-    value={role}
-    onChange={(event) => setRole(event.target.value)}
-    className="w-full rounded-lg border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-  >
-    <option value="Administrator">Administrator</option>
-    <option value="Sales Manager">Sales Manager</option>
-    <option value="Sales Employee">Sales Employee</option>
-  </select>
-
-  <p className="mt-1 text-xs text-slate-400">
-    Temporary role selector for frontend testing only.
-  </p>
-</div>
               {/* Password */}
               <div>
                 <div className="mb-2 flex items-center justify-between">
@@ -176,6 +177,7 @@ function Login() {
                     placeholder="Enter your password"
                     autoComplete="current-password"
                     required
+                    disabled={submitting}
                     className="w-full rounded-lg border border-slate-200 py-3 pl-10 pr-12 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                   />
 
@@ -202,9 +204,10 @@ function Login() {
 
               <button
                 type="submit"
-                className="w-full rounded-lg bg-blue-600 py-3 text-sm font-semibold text-white transition hover:bg-blue-700"
+                disabled={submitting}
+                className="w-full rounded-lg bg-blue-600 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Sign In
+                {submitting ? 'Signing in...' : 'Sign In'}
               </button>
             </form>
 

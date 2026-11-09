@@ -54,7 +54,10 @@ INSTALLED_APPS = [
 
     "apps.accounts.apps.AccountsConfig",
     "apps.customers.apps.CustomersConfig",
-    
+    "apps.leads.apps.LeadsConfig",
+    "apps.opportunities.apps.OpportunitiesConfig",
+    "apps.reports.apps.ReportsConfig",
+    "apps.activities.apps.ActivitiesConfig",
 ]
 
 MIDDLEWARE = [

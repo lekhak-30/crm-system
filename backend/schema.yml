@@ -1,0 +1,1931 @@
+openapi: 3.0.3
+info:
+  title: CRM System API
+  version: 1.0.0
+  description: REST API documentation for the CRM application.
+paths:
+  /api/v1/activities/:
+    get:
+      operationId: v1_activities_list
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedActivityList'
+          description: ''
+    post:
+      operationId: v1_activities_create
+      tags:
+      - v1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Activity'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Activity'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Activity'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Activity'
+          description: ''
+  /api/v1/activities/{id}/:
+    get:
+      operationId: v1_activities_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Activity.
+        required: true
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Activity'
+          description: ''
+    put:
+      operationId: v1_activities_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Activity.
+        required: true
+      tags:
+      - v1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Activity'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Activity'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Activity'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Activity'
+          description: ''
+    patch:
+      operationId: v1_activities_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Activity.
+        required: true
+      tags:
+      - v1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedActivity'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedActivity'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedActivity'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Activity'
+          description: ''
+    delete:
+      operationId: v1_activities_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Activity.
+        required: true
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/activities/{id}/complete/:
+    post:
+      operationId: v1_activities_complete_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Activity.
+        required: true
+      tags:
+      - v1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Activity'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Activity'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Activity'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Activity'
+          description: ''
+  /api/v1/auth/csrf/:
+    get:
+      operationId: v1_auth_csrf_retrieve
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CSRFTokenResponse'
+          description: ''
+  /api/v1/auth/login/:
+    post:
+      operationId: v1_auth_login_create
+      description: |-
+        Takes a set of user credentials and returns an access and refresh JSON web
+        token pair to prove the authentication of those credentials.
+      tags:
+      - v1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomTokenObtainPair'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CustomTokenObtainPair'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CustomTokenObtainPair'
+        required: true
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomTokenObtainPair'
+          description: ''
+  /api/v1/auth/logout/:
+    post:
+      operationId: v1_auth_logout_create
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LogoutResponse'
+          description: ''
+  /api/v1/auth/me/:
+    get:
+      operationId: v1_auth_me_retrieve
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+          description: ''
+  /api/v1/auth/refresh/:
+    post:
+      operationId: v1_auth_refresh_create
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefreshTokenResponse'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefreshTokenErrorResponse'
+          description: ''
+  /api/v1/auth/users/:
+    get:
+      operationId: v1_auth_users_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedUserProfileList'
+          description: ''
+  /api/v1/customers/:
+    get:
+      operationId: v1_customers_list
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedCustomerList'
+          description: ''
+    post:
+      operationId: v1_customers_create
+      tags:
+      - v1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Customer'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Customer'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Customer'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Customer'
+          description: ''
+  /api/v1/customers/{id}/:
+    get:
+      operationId: v1_customers_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Customer.
+        required: true
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Customer'
+          description: ''
+    put:
+      operationId: v1_customers_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Customer.
+        required: true
+      tags:
+      - v1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Customer'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Customer'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Customer'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Customer'
+          description: ''
+    patch:
+      operationId: v1_customers_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Customer.
+        required: true
+      tags:
+      - v1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedCustomer'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedCustomer'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedCustomer'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Customer'
+          description: ''
+    delete:
+      operationId: v1_customers_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Customer.
+        required: true
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/leads/:
+    get:
+      operationId: v1_leads_list
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedLeadList'
+          description: ''
+    post:
+      operationId: v1_leads_create
+      tags:
+      - v1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Lead'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Lead'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Lead'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Lead'
+          description: ''
+  /api/v1/leads/{id}/:
+    get:
+      operationId: v1_leads_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Lead.
+        required: true
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Lead'
+          description: ''
+    put:
+      operationId: v1_leads_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Lead.
+        required: true
+      tags:
+      - v1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Lead'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Lead'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Lead'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Lead'
+          description: ''
+    patch:
+      operationId: v1_leads_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Lead.
+        required: true
+      tags:
+      - v1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedLead'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedLead'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedLead'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Lead'
+          description: ''
+    delete:
+      operationId: v1_leads_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Lead.
+        required: true
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/leads/{id}/convert/:
+    post:
+      operationId: v1_leads_convert_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Lead.
+        required: true
+      tags:
+      - v1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Lead'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Lead'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Lead'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Lead'
+          description: ''
+  /api/v1/opportunities/:
+    get:
+      operationId: v1_opportunities_list
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedOpportunityList'
+          description: ''
+    post:
+      operationId: v1_opportunities_create
+      tags:
+      - v1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Opportunity'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Opportunity'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Opportunity'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Opportunity'
+          description: ''
+  /api/v1/opportunities/{id}/:
+    get:
+      operationId: v1_opportunities_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Opportunity.
+        required: true
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Opportunity'
+          description: ''
+    put:
+      operationId: v1_opportunities_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Opportunity.
+        required: true
+      tags:
+      - v1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Opportunity'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Opportunity'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Opportunity'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Opportunity'
+          description: ''
+    patch:
+      operationId: v1_opportunities_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Opportunity.
+        required: true
+      tags:
+      - v1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedOpportunity'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedOpportunity'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedOpportunity'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Opportunity'
+          description: ''
+    delete:
+      operationId: v1_opportunities_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Opportunity.
+        required: true
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/opportunities/{id}/close-lost/:
+    post:
+      operationId: v1_opportunities_close_lost_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Opportunity.
+        required: true
+      tags:
+      - v1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Opportunity'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Opportunity'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Opportunity'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Opportunity'
+          description: ''
+  /api/v1/opportunities/{id}/close-won/:
+    post:
+      operationId: v1_opportunities_close_won_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Opportunity.
+        required: true
+      tags:
+      - v1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Opportunity'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Opportunity'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Opportunity'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Opportunity'
+          description: ''
+  /api/v1/reports/dashboard/:
+    get:
+      operationId: v1_reports_dashboard_retrieve
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardResponse'
+          description: ''
+  /api/v1/reports/lead-conversion/:
+    get:
+      operationId: v1_reports_lead_conversion_retrieve
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeadConversionResponse'
+          description: ''
+  /api/v1/reports/revenue/:
+    get:
+      operationId: v1_reports_revenue_retrieve
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RevenueReportResponse'
+          description: ''
+  /api/v1/reports/sales-performance/:
+    get:
+      operationId: v1_reports_sales_performance_retrieve
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SalesPerformanceResponse'
+          description: ''
+  /api/v1/reports/sales-pipeline/:
+    get:
+      operationId: v1_reports_sales_pipeline_retrieve
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SalesPipelineResponse'
+          description: ''
+components:
+  schemas:
+    Activity:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        assigned_to_name:
+          type: string
+          readOnly: true
+          nullable: true
+        created_by_name:
+          type: string
+          readOnly: true
+          nullable: true
+        customer_name:
+          type: string
+          nullable: true
+          readOnly: true
+        lead_name:
+          type: string
+          nullable: true
+          readOnly: true
+        opportunity_name:
+          type: string
+          readOnly: true
+          nullable: true
+        subject:
+          type: string
+          maxLength: 200
+        activity_type:
+          $ref: '#/components/schemas/ActivityTypeEnum'
+        description:
+          type: string
+        status:
+          $ref: '#/components/schemas/ActivityStatusEnum'
+        priority:
+          $ref: '#/components/schemas/PriorityEnum'
+        due_at:
+          type: string
+          format: date-time
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        customer:
+          type: integer
+          nullable: true
+        lead:
+          type: integer
+          nullable: true
+        opportunity:
+          type: integer
+          nullable: true
+        assigned_to:
+          type: integer
+          nullable: true
+        created_by:
+          type: integer
+          readOnly: true
+          nullable: true
+      required:
+      - activity_type
+      - assigned_to_name
+      - completed_at
+      - created_at
+      - created_by
+      - created_by_name
+      - customer_name
+      - id
+      - lead_name
+      - opportunity_name
+      - subject
+      - updated_at
+    ActivityStatusEnum:
+      enum:
+      - PLANNED
+      - IN_PROGRESS
+      - COMPLETED
+      - CANCELLED
+      type: string
+      description: |-
+        * `PLANNED` - Planned
+        * `IN_PROGRESS` - In Progress
+        * `COMPLETED` - Completed
+        * `CANCELLED` - Cancelled
+    ActivityTypeEnum:
+      enum:
+      - CALL
+      - MEETING
+      - EMAIL
+      - TASK
+      - FOLLOW_UP
+      type: string
+      description: |-
+        * `CALL` - Call
+        * `MEETING` - Meeting
+        * `EMAIL` - Email
+        * `TASK` - Task
+        * `FOLLOW_UP` - Follow-up
+    CSRFTokenResponse:
+      type: object
+      properties:
+        csrfToken:
+          type: string
+      required:
+      - csrfToken
+    CustomTokenObtainPair:
+      type: object
+      properties:
+        username:
+          type: string
+          writeOnly: true
+        password:
+          type: string
+          writeOnly: true
+      required:
+      - password
+      - username
+    Customer:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        assigned_to_name:
+          type: string
+          readOnly: true
+          nullable: true
+        created_by_name:
+          type: string
+          readOnly: true
+          nullable: true
+        first_name:
+          type: string
+          maxLength: 100
+        last_name:
+          type: string
+          maxLength: 100
+        email:
+          oneOf:
+          - type: string
+            format: email
+            maxLength: 254
+          - type: string
+            maxLength: 0
+        phone:
+          type: string
+          maxLength: 20
+        company:
+          type: string
+          maxLength: 150
+        job_title:
+          type: string
+          maxLength: 100
+        address:
+          type: string
+        city:
+          type: string
+          maxLength: 100
+        state:
+          type: string
+          maxLength: 100
+        country:
+          type: string
+          maxLength: 100
+        postal_code:
+          type: string
+          maxLength: 20
+        status:
+          $ref: '#/components/schemas/CustomerStatusEnum'
+        notes:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        assigned_to:
+          type: integer
+          nullable: true
+        created_by:
+          type: integer
+          readOnly: true
+          nullable: true
+      required:
+      - assigned_to_name
+      - created_at
+      - created_by
+      - created_by_name
+      - first_name
+      - id
+      - last_name
+      - updated_at
+    CustomerStatusEnum:
+      enum:
+      - ACTIVE
+      - INACTIVE
+      type: string
+      description: |-
+        * `ACTIVE` - Active
+        * `INACTIVE` - Inactive
+    DashboardResponse:
+      type: object
+      properties:
+        customers: {}
+        leads: {}
+        opportunities: {}
+        revenue_by_currency:
+          type: array
+          items: {}
+      required:
+      - customers
+      - leads
+      - opportunities
+      - revenue_by_currency
+    Lead:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        assigned_to_name:
+          type: string
+          readOnly: true
+          nullable: true
+        created_by_name:
+          type: string
+          readOnly: true
+          nullable: true
+        converted_customer_name:
+          type: string
+          nullable: true
+          readOnly: true
+        first_name:
+          type: string
+          maxLength: 100
+        last_name:
+          type: string
+          maxLength: 100
+        email:
+          oneOf:
+          - type: string
+            format: email
+            maxLength: 254
+          - type: string
+            maxLength: 0
+        phone:
+          type: string
+          maxLength: 20
+        company:
+          type: string
+          maxLength: 150
+        job_title:
+          type: string
+          maxLength: 100
+        source:
+          $ref: '#/components/schemas/SourceEnum'
+        status:
+          $ref: '#/components/schemas/LeadStatusEnum'
+        converted_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        notes:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        assigned_to:
+          type: integer
+          nullable: true
+        created_by:
+          type: integer
+          readOnly: true
+          nullable: true
+        converted_customer:
+          type: integer
+          readOnly: true
+          nullable: true
+      required:
+      - assigned_to_name
+      - converted_at
+      - converted_customer
+      - converted_customer_name
+      - created_at
+      - created_by
+      - created_by_name
+      - first_name
+      - id
+      - last_name
+      - updated_at
+    LeadConversionResponse:
+      type: object
+      properties:
+        report:
+          type: string
+        overall: {}
+        conversion_by_source:
+          type: array
+          items: {}
+      required:
+      - conversion_by_source
+      - overall
+      - report
+    LeadStatusEnum:
+      enum:
+      - NEW
+      - CONTACTED
+      - QUALIFIED
+      - UNQUALIFIED
+      - CONVERTED
+      type: string
+      description: |-
+        * `NEW` - New
+        * `CONTACTED` - Contacted
+        * `QUALIFIED` - Qualified
+        * `UNQUALIFIED` - Unqualified
+        * `CONVERTED` - Converted
+    LogoutResponse:
+      type: object
+      properties:
+        detail:
+          type: string
+      required:
+      - detail
+    Opportunity:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        customer_name:
+          type: string
+          nullable: true
+          readOnly: true
+        assigned_to_name:
+          type: string
+          readOnly: true
+          nullable: true
+        created_by_name:
+          type: string
+          readOnly: true
+          nullable: true
+        weighted_value:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+          readOnly: true
+        title:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+        amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        currency:
+          type: string
+          maxLength: 3
+        stage:
+          $ref: '#/components/schemas/StageEnum'
+        probability:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
+        expected_close_date:
+          type: string
+          format: date
+          nullable: true
+        actual_close_date:
+          type: string
+          format: date
+          readOnly: true
+          nullable: true
+        lost_reason:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        customer:
+          type: integer
+        assigned_to:
+          type: integer
+          nullable: true
+        created_by:
+          type: integer
+          readOnly: true
+          nullable: true
+      required:
+      - actual_close_date
+      - amount
+      - assigned_to_name
+      - created_at
+      - created_by
+      - created_by_name
+      - customer
+      - customer_name
+      - id
+      - title
+      - updated_at
+      - weighted_value
+    PaginatedActivityList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Activity'
+    PaginatedCustomerList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Customer'
+    PaginatedLeadList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Lead'
+    PaginatedOpportunityList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Opportunity'
+    PaginatedUserProfileList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserProfile'
+    PatchedActivity:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        assigned_to_name:
+          type: string
+          readOnly: true
+          nullable: true
+        created_by_name:
+          type: string
+          readOnly: true
+          nullable: true
+        customer_name:
+          type: string
+          nullable: true
+          readOnly: true
+        lead_name:
+          type: string
+          nullable: true
+          readOnly: true
+        opportunity_name:
+          type: string
+          readOnly: true
+          nullable: true
+        subject:
+          type: string
+          maxLength: 200
+        activity_type:
+          $ref: '#/components/schemas/ActivityTypeEnum'
+        description:
+          type: string
+        status:
+          $ref: '#/components/schemas/ActivityStatusEnum'
+        priority:
+          $ref: '#/components/schemas/PriorityEnum'
+        due_at:
+          type: string
+          format: date-time
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        customer:
+          type: integer
+          nullable: true
+        lead:
+          type: integer
+          nullable: true
+        opportunity:
+          type: integer
+          nullable: true
+        assigned_to:
+          type: integer
+          nullable: true
+        created_by:
+          type: integer
+          readOnly: true
+          nullable: true
+    PatchedCustomer:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        assigned_to_name:
+          type: string
+          readOnly: true
+          nullable: true
+        created_by_name:
+          type: string
+          readOnly: true
+          nullable: true
+        first_name:
+          type: string
+          maxLength: 100
+        last_name:
+          type: string
+          maxLength: 100
+        email:
+          oneOf:
+          - type: string
+            format: email
+            maxLength: 254
+          - type: string
+            maxLength: 0
+        phone:
+          type: string
+          maxLength: 20
+        company:
+          type: string
+          maxLength: 150
+        job_title:
+          type: string
+          maxLength: 100
+        address:
+          type: string
+        city:
+          type: string
+          maxLength: 100
+        state:
+          type: string
+          maxLength: 100
+        country:
+          type: string
+          maxLength: 100
+        postal_code:
+          type: string
+          maxLength: 20
+        status:
+          $ref: '#/components/schemas/CustomerStatusEnum'
+        notes:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        assigned_to:
+          type: integer
+          nullable: true
+        created_by:
+          type: integer
+          readOnly: true
+          nullable: true
+    PatchedLead:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        assigned_to_name:
+          type: string
+          readOnly: true
+          nullable: true
+        created_by_name:
+          type: string
+          readOnly: true
+          nullable: true
+        converted_customer_name:
+          type: string
+          nullable: true
+          readOnly: true
+        first_name:
+          type: string
+          maxLength: 100
+        last_name:
+          type: string
+          maxLength: 100
+        email:
+          oneOf:
+          - type: string
+            format: email
+            maxLength: 254
+          - type: string
+            maxLength: 0
+        phone:
+          type: string
+          maxLength: 20
+        company:
+          type: string
+          maxLength: 150
+        job_title:
+          type: string
+          maxLength: 100
+        source:
+          $ref: '#/components/schemas/SourceEnum'
+        status:
+          $ref: '#/components/schemas/LeadStatusEnum'
+        converted_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        notes:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        assigned_to:
+          type: integer
+          nullable: true
+        created_by:
+          type: integer
+          readOnly: true
+          nullable: true
+        converted_customer:
+          type: integer
+          readOnly: true
+          nullable: true
+    PatchedOpportunity:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        customer_name:
+          type: string
+          nullable: true
+          readOnly: true
+        assigned_to_name:
+          type: string
+          readOnly: true
+          nullable: true
+        created_by_name:
+          type: string
+          readOnly: true
+          nullable: true
+        weighted_value:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+          readOnly: true
+        title:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+        amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+        currency:
+          type: string
+          maxLength: 3
+        stage:
+          $ref: '#/components/schemas/StageEnum'
+        probability:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
+        expected_close_date:
+          type: string
+          format: date
+          nullable: true
+        actual_close_date:
+          type: string
+          format: date
+          readOnly: true
+          nullable: true
+        lost_reason:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        customer:
+          type: integer
+        assigned_to:
+          type: integer
+          nullable: true
+        created_by:
+          type: integer
+          readOnly: true
+          nullable: true
+    PriorityEnum:
+      enum:
+      - LOW
+      - MEDIUM
+      - HIGH
+      - URGENT
+      type: string
+      description: |-
+        * `LOW` - Low
+        * `MEDIUM` - Medium
+        * `HIGH` - High
+        * `URGENT` - Urgent
+    RefreshTokenErrorResponse:
+      type: object
+      properties:
+        detail:
+          type: string
+      required:
+      - detail
+    RefreshTokenResponse:
+      type: object
+      properties:
+        access:
+          type: string
+      required:
+      - access
+    RevenueReportResponse:
+      type: object
+      properties:
+        report:
+          type: string
+        revenue_by_currency:
+          type: array
+          items: {}
+      required:
+      - report
+      - revenue_by_currency
+    RoleEnum:
+      enum:
+      - ADMIN
+      - SALES_MANAGER
+      - SALES_EMPLOYEE
+      type: string
+      description: |-
+        * `ADMIN` - Administrator
+        * `SALES_MANAGER` - Sales Manager
+        * `SALES_EMPLOYEE` - Sales Employee
+    SalesPerformanceResponse:
+      type: object
+      properties:
+        report:
+          type: string
+        performance:
+          type: array
+          items: {}
+      required:
+      - performance
+      - report
+    SalesPipelineResponse:
+      type: object
+      properties:
+        report:
+          type: string
+        total_deals:
+          type: integer
+        pipeline:
+          type: array
+          items: {}
+      required:
+      - pipeline
+      - report
+      - total_deals
+    SourceEnum:
+      enum:
+      - WEBSITE
+      - REFERRAL
+      - SOCIAL_MEDIA
+      - EMAIL
+      - PHONE
+      - ADVERTISEMENT
+      - OTHER
+      type: string
+      description: |-
+        * `WEBSITE` - Website
+        * `REFERRAL` - Referral
+        * `SOCIAL_MEDIA` - Social Media
+        * `EMAIL` - Email
+        * `PHONE` - Phone
+        * `ADVERTISEMENT` - Advertisement
+        * `OTHER` - Other
+    StageEnum:
+      enum:
+      - PROSPECTING
+      - QUALIFICATION
+      - PROPOSAL
+      - NEGOTIATION
+      - WON
+      - LOST
+      type: string
+      description: |-
+        * `PROSPECTING` - Prospecting
+        * `QUALIFICATION` - Qualification
+        * `PROPOSAL` - Proposal
+        * `NEGOTIATION` - Negotiation
+        * `WON` - Won
+        * `LOST` - Lost
+    UserProfile:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        username:
+          type: string
+          readOnly: true
+          description: Required. 150 characters or fewer. Letters, digits and @/./+/-/_
+            only.
+        email:
+          type: string
+          format: email
+          readOnly: true
+        first_name:
+          type: string
+          readOnly: true
+        last_name:
+          type: string
+          readOnly: true
+        role:
+          allOf:
+          - $ref: '#/components/schemas/RoleEnum'
+          readOnly: true
+        role_display:
+          type: string
+          readOnly: true
+        phone:
+          type: string
+          readOnly: true
+        department:
+          type: string
+          readOnly: true
+      required:
+      - department
+      - email
+      - first_name
+      - id
+      - last_name
+      - phone
+      - role
+      - role_display
+      - username
+  securitySchemes:
+    jwtAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

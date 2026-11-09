@@ -1,6 +1,5 @@
 
-import { useMemo, useState } from 'react'
-import { validateCustomer } from '../../utils/validators'
+import { useEffect, useState } from 'react'
 import {
   Search,
   Plus,
@@ -13,215 +12,286 @@ import {
   Users,
 } from 'lucide-react'
 
-const initialCustomers = [
-  {
-    id: 1,
-    name: 'John Smith',
-    email: 'john@example.com',
-    company: 'Tech Solutions',
-    phone: '+1 202 555 0101',
-    status: 'Active',
-  },
-  {
-    id: 2,
-    name: 'Sarah Johnson',
-    email: 'sarah@example.com',
-    company: 'Digital Works',
-    phone: '+1 202 555 0102',
-    status: 'Active',
-  },
-  {
-    id: 3,
-    name: 'Michael Brown',
-    email: 'michael@example.com',
-    company: 'Global Systems',
-    phone: '+1 202 555 0103',
-    status: 'Pending',
-  },
-  {
-    id: 4,
-    name: 'Emily Davis',
-    email: 'emily@example.com',
-    company: 'Creative Studio',
-    phone: '+1 202 555 0104',
-    status: 'Active',
-  },
-  {
-    id: 5,
-    name: 'David Wilson',
-    email: 'david@example.com',
-    company: 'Wilson Enterprises',
-    phone: '+1 202 555 0105',
-    status: 'Inactive',
-  },
-  {
-    id: 6,
-    name: 'Olivia Martin',
-    email: 'olivia@example.com',
-    company: 'Martin Group',
-    phone: '+1 202 555 0106',
-    status: 'Active',
-  },
-  {
-    id: 7,
-    name: 'James Anderson',
-    email: 'james@example.com',
-    company: 'Anderson Tech',
-    phone: '+1 202 555 0107',
-    status: 'Pending',
-  },
-]
+
+import api from '../../services/api'
+import API_ENDPOINTS from '../../services/endpoints'
 
 const emptyForm = {
-  name: '',
+  first_name: '',
+  last_name: '',
   email: '',
   company: '',
   phone: '',
-  status: 'Active',
+  status: 'ACTIVE',
+}
+
+const PAGE_SIZE = 10
+
+function getCustomerName(customer) {
+  return `${customer.first_name || ''} ${customer.last_name || ''}`.trim()
+}
+
+function normalizeCustomer(customer) {
+  return {
+    ...customer,
+    name: getCustomerName(customer),
+    status: customer.status === 'ACTIVE' ? 'Active' : 'Inactive',
+  }
+}
+
+function getApiError(error) {
+  const data = error.response?.data
+
+  if (!data) return 'Unable to connect to the server. Please try again.'
+
+  if (typeof data.detail === 'string') return data.detail
+
+  if (typeof data === 'string') return data
+
+  return 'Please check the submitted information and try again.'
+}
+
+function validateForm(form) {
+  const errors = {}
+
+  if (!form.first_name.trim()) errors.first_name = 'First name is required.'
+  if (!form.last_name.trim()) errors.last_name = 'Last name is required.'
+
+  if (!form.email.trim()) {
+    errors.email = 'Email is required.'
+  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
+    errors.email = 'Enter a valid email address.'
+  }
+
+  return errors
 }
 
 function Customers() {
-  const [customers, setCustomers] = useState(initialCustomers)
+  const [customers, setCustomers] = useState([])
+  const [totalCount, setTotalCount] = useState(0)
+
   const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState('All')
   const [currentPage, setCurrentPage] = useState(1)
+
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [pageError, setPageError] = useState('')
+
   const [modalOpen, setModalOpen] = useState(false)
   const [editingCustomer, setEditingCustomer] = useState(null)
   const [selectedCustomer, setSelectedCustomer] = useState(null)
+
   const [form, setForm] = useState(emptyForm)
   const [errors, setErrors] = useState({})
+  const [formError, setFormError] = useState('')
 
-  const pageSize = 5
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE))
 
-  const filteredCustomers = useMemo(() => {
-    return customers.filter((customer) => {
-      const query = search.toLowerCase()
+  // Fetch customers from Django whenever the page or search changes.
+  useEffect(() => {
+    const controller = new AbortController()
 
-      const matchesSearch =
-        customer.name.toLowerCase().includes(query) ||
-        customer.email.toLowerCase().includes(query) ||
-        customer.company.toLowerCase().includes(query)
+    async function fetchCustomers() {
+      setLoading(true)
+      setPageError('')
 
-      const matchesStatus =
-        statusFilter === 'All' || customer.status === statusFilter
+      try {
+        const response = await api.get(API_ENDPOINTS.CUSTOMERS.LIST, {
+          params: {
+            page: currentPage,
+            search: search.trim() || undefined,
+          },
+          signal: controller.signal,
+        })
 
-      return matchesSearch && matchesStatus
-    })
-  }, [customers, search, statusFilter])
+        setCustomers(response.data.results.map(normalizeCustomer))
+        setTotalCount(response.data.count)
+      } catch (error) {
+        if (error.name === 'CanceledError') return
 
-  const totalPages = Math.max(
-    1,
-    Math.ceil(filteredCustomers.length / pageSize)
-  )
+        setPageError(getApiError(error))
+        setCustomers([])
+        setTotalCount(0)
+      } finally {
+        if (!controller.signal.aborted) {
+          setLoading(false)
+        }
+      }
+    }
 
-  const paginatedCustomers = filteredCustomers.slice(
-    (currentPage - 1) * pageSize,
-    currentPage * pageSize
-  )
+    fetchCustomers()
+
+    return () => controller.abort()
+  }, [currentPage, search])
+
+  const activeCount = customers.filter(
+    (customer) => customer.status === 'Active'
+  ).length
+
+  const inactiveCount = customers.filter(
+    (customer) => customer.status === 'Inactive'
+  ).length
 
   const openAddModal = () => {
     setEditingCustomer(null)
     setForm(emptyForm)
-    setModalOpen(true)
     setErrors({})
+    setFormError('')
     setModalOpen(true)
   }
 
   const openEditModal = (customer) => {
     setEditingCustomer(customer)
+
     setForm({
-      name: customer.name,
-      email: customer.email,
-      company: customer.company,
-      phone: customer.phone,
-      status: customer.status,
+      first_name: customer.first_name || '',
+      last_name: customer.last_name || '',
+      email: customer.email || '',
+      company: customer.company || '',
+      phone: customer.phone || '',
+      status: customer.status === 'Active' ? 'ACTIVE' : 'INACTIVE',
     })
-    setModalOpen(true)
+
     setErrors({})
+    setFormError('')
     setModalOpen(true)
   }
 
   const closeModal = () => {
+    if (saving) return
+
     setModalOpen(false)
     setEditingCustomer(null)
     setForm(emptyForm)
     setErrors({})
+    setFormError('')
   }
 
-  const handleSubmit = (event) => {
-  event.preventDefault()
+  const updateForm = (event) => {
+    const { name, value } = event.target
 
-  const validationErrors = validateCustomer(form)
-  setErrors(validationErrors)
+    setForm((previous) => ({
+      ...previous,
+      [name]: value,
+    }))
 
-  if (Object.keys(validationErrors).length > 0) {
-    return
+    setErrors((previous) => ({
+      ...previous,
+      [name]: '',
+    }))
   }
 
-  if (editingCustomer) {
-    setCustomers((previous) =>
-      previous.map((customer) =>
-        customer.id === editingCustomer.id
-          ? { ...customer, ...form }
-          : customer
-      )
-    )
-  } else {
-    const newCustomer = {
-      id: Math.max(0, ...customers.map((customer) => customer.id)) + 1,
-      ...form,
+  const handleSubmit = async (event) => {
+    event.preventDefault()
+
+    const validationErrors = validateForm(form)
+    setErrors(validationErrors)
+    setFormError('')
+
+    if (Object.keys(validationErrors).length > 0) return
+
+    setSaving(true)
+
+    try {
+      const payload = {
+        ...form,
+        first_name: form.first_name.trim(),
+        last_name: form.last_name.trim(),
+        email: form.email.trim(),
+        company: form.company.trim(),
+        phone: form.phone.trim(),
+      }
+
+      if (editingCustomer) {
+        await api.patch(
+          API_ENDPOINTS.CUSTOMERS.DETAIL(editingCustomer.id),
+          payload
+        )
+      } else {
+        await api.post(API_ENDPOINTS.CUSTOMERS.LIST, payload)
+      }
+
+      setModalOpen(false)
+      setEditingCustomer(null)
+      setForm(emptyForm)
+      setErrors({})
+
+      // A new record should appear on the first page.
+      if (!editingCustomer && currentPage !== 1) {
+        setCurrentPage(1)
+      } else {
+        // Trigger a fresh request even when the page did not change.
+        setCurrentPage((page) => page)
+        window.dispatchEvent(new Event('crm:customers-updated'))
+      }
+
+      // Refresh the page after a successful write.
+      const response = await api.get(API_ENDPOINTS.CUSTOMERS.LIST, {
+        params: {
+          page: !editingCustomer ? 1 : currentPage,
+          search: search.trim() || undefined,
+        },
+      })
+
+      setCustomers(response.data.results.map(normalizeCustomer))
+      setTotalCount(response.data.count)
+    } catch (error) {
+      const data = error.response?.data
+
+      if (data && typeof data === 'object' && !data.detail) {
+        const fieldErrors = {}
+
+        Object.entries(data).forEach(([field, messages]) => {
+          fieldErrors[field] = Array.isArray(messages)
+            ? messages.join(' ')
+            : String(messages)
+        })
+
+        setErrors(fieldErrors)
+      } else {
+        setFormError(getApiError(error))
+      }
+    } finally {
+      setSaving(false)
     }
-
-    setCustomers((previous) => [newCustomer, ...previous])
-    setCurrentPage(1)
   }
 
-  closeModal()
-}
-
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
     const confirmed = window.confirm(
       'Are you sure you want to delete this customer?'
     )
 
     if (!confirmed) return
 
-    setCustomers((previous) =>
-      previous.filter((customer) => customer.id !== id)
-    )
+    try {
+      await api.delete(API_ENDPOINTS.CUSTOMERS.DETAIL(id))
+
+      if (customers.length === 1 && currentPage > 1) {
+        setCurrentPage((page) => page - 1)
+      } else {
+        const response = await api.get(API_ENDPOINTS.CUSTOMERS.LIST, {
+          params: {
+            page: currentPage,
+            search: search.trim() || undefined,
+          },
+        })
+
+        setCustomers(response.data.results.map(normalizeCustomer))
+        setTotalCount(response.data.count)
+      }
+
+      if (selectedCustomer?.id === id) {
+        setSelectedCustomer(null)
+      }
+    } catch (error) {
+      window.alert(getApiError(error))
+    }
   }
-
-  const updateForm = (event) => {
-  const { name, value } = event.target
-
-  setForm((previous) => ({
-    ...previous,
-    [name]: value,
-  }))
-
-  setErrors((previous) => ({
-    ...previous,
-    [name]: '',
-  }))
-}
 
   const changeSearch = (value) => {
     setSearch(value)
     setCurrentPage(1)
   }
-
-  const changeFilter = (value) => {
-    setStatusFilter(value)
-    setCurrentPage(1)
-  }
-
-  const activeCount = customers.filter(
-    (customer) => customer.status === 'Active'
-  ).length
-
-  const pendingCount = customers.filter(
-    (customer) => customer.status === 'Pending'
-  ).length
 
   return (
     <div className="space-y-6">
@@ -250,25 +320,25 @@ function Customers() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <SummaryCard
           title="Total Customers"
-          value={customers.length}
+          value={totalCount}
           description="All customer records"
         />
         <SummaryCard
-          title="Active Customers"
+          title="Active on This Page"
           value={activeCount}
-          description="Currently active"
+          description="Active records on current page"
         />
         <SummaryCard
-          title="Pending Customers"
-          value={pendingCount}
-          description="Awaiting confirmation"
+          title="Inactive on This Page"
+          value={inactiveCount}
+          description="Inactive records on current page"
         />
       </div>
 
       {/* Customer table */}
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
 
-        {/* Search and filters */}
+        {/* Search */}
         <div className="flex flex-col gap-3 border-b border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="relative w-full sm:max-w-sm">
             <Search
@@ -285,18 +355,17 @@ function Customers() {
             />
           </div>
 
-          <select
-            value={statusFilter}
-            onChange={(event) => changeFilter(event.target.value)}
-            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 outline-none focus:border-blue-500"
-            aria-label="Filter customers by status"
-          >
-            <option value="All">All statuses</option>
-            <option value="Active">Active</option>
-            <option value="Pending">Pending</option>
-            <option value="Inactive">Inactive</option>
-          </select>
+          <span className="text-xs text-slate-500">
+            Search by name, email, phone or company
+          </span>
         </div>
+
+        {/* Error */}
+        {pageError && (
+          <div className="m-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            {pageError}
+          </div>
+        )}
 
         {/* Table */}
         <div className="overflow-x-auto">
@@ -312,14 +381,20 @@ function Customers() {
             </thead>
 
             <tbody className="divide-y divide-slate-100">
-              {paginatedCustomers.map((customer) => (
-                <tr
-                  key={customer.id}
-                  className="hover:bg-slate-50"
-                >
+
+              {loading && (
+                <tr>
+                  <td colSpan="5" className="px-5 py-12 text-center text-sm text-slate-500">
+                    Loading customers...
+                  </td>
+                </tr>
+              )}
+
+              {!loading && !pageError && customers.map((customer) => (
+                <tr key={customer.id} className="hover:bg-slate-50">
                   <td className="px-5 py-4">
                     <p className="text-sm font-semibold text-slate-800">
-                      {customer.name}
+                      {customer.name || '—'}
                     </p>
                     <p className="mt-1 text-xs text-slate-400">
                       {customer.email}
@@ -327,11 +402,11 @@ function Customers() {
                   </td>
 
                   <td className="px-5 py-4 text-sm text-slate-600">
-                    {customer.company}
+                    {customer.company || '—'}
                   </td>
 
                   <td className="px-5 py-4 text-sm text-slate-600">
-                    {customer.phone}
+                    {customer.phone || '—'}
                   </td>
 
                   <td className="px-5 py-4">
@@ -366,7 +441,7 @@ function Customers() {
                 </tr>
               ))}
 
-              {paginatedCustomers.length === 0 && (
+              {!loading && !pageError && customers.length === 0 && (
                 <tr>
                   <td colSpan="5" className="px-5 py-12 text-center">
                     <Users
@@ -377,7 +452,7 @@ function Customers() {
                       No customers found
                     </p>
                     <p className="mt-1 text-xs text-slate-400">
-                      Try changing your search or filters.
+                      Add a customer or change your search.
                     </p>
                   </td>
                 </tr>
@@ -389,15 +464,15 @@ function Customers() {
         {/* Pagination */}
         <div className="flex flex-col gap-3 border-t border-slate-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs text-slate-500">
-            Showing {filteredCustomers.length === 0 ? 0 : (currentPage - 1) * pageSize + 1}
+            Showing {totalCount === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1}
             {' '}to{' '}
-            {Math.min(currentPage * pageSize, filteredCustomers.length)}
-            {' '}of {filteredCustomers.length} customers
+            {Math.min(currentPage * PAGE_SIZE, totalCount)}
+            {' '}of {totalCount} customers
           </p>
 
           <div className="flex items-center gap-2">
             <button
-              disabled={currentPage === 1}
+              disabled={currentPage === 1 || loading}
               onClick={() => setCurrentPage((page) => page - 1)}
               className="rounded-lg border border-slate-200 p-2 text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
               aria-label="Previous page"
@@ -410,7 +485,7 @@ function Customers() {
             </span>
 
             <button
-              disabled={currentPage === totalPages}
+              disabled={currentPage >= totalPages || loading}
               onClick={() => setCurrentPage((page) => page + 1)}
               className="rounded-lg border border-slate-200 p-2 text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
               aria-label="Next page"
@@ -432,7 +507,8 @@ function Customers() {
 
               <button
                 onClick={closeModal}
-                className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"
+                disabled={saving}
+                className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 disabled:opacity-50"
                 aria-label="Close form"
               >
                 <X size={20} />
@@ -440,15 +516,33 @@ function Customers() {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4 p-5">
-              <FormField
-                label="Full Name"
-                name="name"
-                value={form.name}
-                onChange={updateForm}
-                placeholder="Enter customer name"
-                required
-                error={errors.name}
-              />
+              {formError && (
+                <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                  {formError}
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <FormField
+                  label="First Name"
+                  name="first_name"
+                  value={form.first_name}
+                  onChange={updateForm}
+                  placeholder="First name"
+                  required
+                  error={errors.first_name}
+                />
+
+                <FormField
+                  label="Last Name"
+                  name="last_name"
+                  value={form.last_name}
+                  onChange={updateForm}
+                  placeholder="Last name"
+                  required
+                  error={errors.last_name}
+                />
+              </div>
 
               <FormField
                 label="Email Address"
@@ -458,7 +552,7 @@ function Customers() {
                 onChange={updateForm}
                 placeholder="Enter email address"
                 required
-                error={errors.name}
+                error={errors.email}
               />
 
               <FormField
@@ -467,7 +561,7 @@ function Customers() {
                 value={form.company}
                 onChange={updateForm}
                 placeholder="Enter company name"
-                required
+                error={errors.company}
               />
 
               <FormField
@@ -476,8 +570,7 @@ function Customers() {
                 value={form.phone}
                 onChange={updateForm}
                 placeholder="Enter phone number"
-                required
-                error={errors.name}
+                error={errors.phone}
               />
 
               <div>
@@ -491,9 +584,8 @@ function Customers() {
                   onChange={updateForm}
                   className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
                 >
-                  <option>Active</option>
-                  <option>Pending</option>
-                  <option>Inactive</option>
+                  <option value="ACTIVE">Active</option>
+                  <option value="INACTIVE">Inactive</option>
                 </select>
               </div>
 
@@ -501,16 +593,22 @@ function Customers() {
                 <button
                   type="button"
                   onClick={closeModal}
-                  className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+                  disabled={saving}
+                  className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
                 >
                   Cancel
                 </button>
 
                 <button
                   type="submit"
-                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                  disabled={saving}
+                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {editingCustomer ? 'Save Changes' : 'Add Customer'}
+                  {saving
+                    ? 'Saving...'
+                    : editingCustomer
+                      ? 'Save Changes'
+                      : 'Add Customer'}
                 </button>
               </div>
             </form>
@@ -540,8 +638,8 @@ function Customers() {
               {Object.entries({
                 Name: selectedCustomer.name,
                 Email: selectedCustomer.email,
-                Company: selectedCustomer.company,
-                Phone: selectedCustomer.phone,
+                Company: selectedCustomer.company || '—',
+                Phone: selectedCustomer.phone || '—',
                 Status: selectedCustomer.status,
               }).map(([label, value]) => (
                 <div key={label}>
@@ -549,7 +647,7 @@ function Customers() {
                     {label}
                   </p>
                   <p className="mt-1 text-sm text-slate-700">
-                    {value}
+                    {value || '—'}
                   </p>
                 </div>
               ))}
@@ -564,7 +662,6 @@ function Customers() {
           </div>
         </div>
       )}
-
     </div>
   )
 }
@@ -582,12 +679,11 @@ function SummaryCard({ title, value, description }) {
 function StatusBadge({ status }) {
   const styles = {
     Active: 'bg-green-50 text-green-700',
-    Pending: 'bg-amber-50 text-amber-700',
     Inactive: 'bg-slate-100 text-slate-600',
   }
 
   return (
-    <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${styles[status]}`}>
+    <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${styles[status] || styles.Inactive}`}>
       {status}
     </span>
   )

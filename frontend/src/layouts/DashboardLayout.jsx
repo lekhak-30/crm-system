@@ -8,12 +8,12 @@ import {
   Target,
   CalendarCheck,
   ChartNoAxesCombined,
+  Settings,
   Menu,
   X,
   LogOut,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
-
 
 const navigation = [
   {
@@ -58,8 +58,13 @@ const navigation = [
     icon: Users,
     roles: ['Administrator'],
   },
+  {
+    name: 'Settings',
+    path: '/settings',
+    icon: Settings,
+    roles: ['Administrator', 'Sales Manager', 'Sales Employee'],
+  },
 ]
-
 
 function DashboardLayout() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -74,9 +79,10 @@ function DashboardLayout() {
   const displayName = user?.name || 'User'
   const displayRole = user?.role || 'Employee'
   const initial = displayName.charAt(0).toUpperCase()
+
   const visibleNavigation = navigation.filter((item) =>
-  item.roles.includes(user?.role)
-)
+    item.roles.includes(user?.role)
+  )
 
   const sidebarContent = (
     <>

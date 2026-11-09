@@ -1,15 +1,15 @@
 
 const API_ENDPOINTS = {
   AUTH: {
+    CSRF: '/auth/csrf/',
     LOGIN: '/auth/login/',
     LOGOUT: '/auth/logout/',
-    REFRESH: '/auth/token/refresh/',
+    REFRESH: '/auth/refresh/',
     CURRENT_USER: '/auth/me/',
-    FORGOT_PASSWORD: '/auth/password-reset/',
   },
 
   DASHBOARD: {
-    SUMMARY: '/dashboard/summary/',
+    SUMMARY: '/dashboard/',
   },
 
   CUSTOMERS: {
@@ -26,20 +26,27 @@ const API_ENDPOINTS = {
   OPPORTUNITIES: {
     LIST: '/opportunities/',
     DETAIL: (id) => `/opportunities/${id}/`,
+    CLOSE_WON: (id) => `/opportunities/${id}/close-won/`,
+    CLOSE_LOST: (id) => `/opportunities/${id}/close-lost/`,
   },
 
   ACTIVITIES: {
     LIST: '/activities/',
     DETAIL: (id) => `/activities/${id}/`,
+    COMPLETE: (id) => `/activities/${id}/complete/`,
   },
 
-  REPORTS: {
-    SUMMARY: '/reports/summary/',
-  },
+REPORTS: {
+  SUMMARY: '/reports/dashboard/',
+  SALES_PIPELINE: '/reports/sales-pipeline/',
+  REVENUE: '/reports/revenue/',
+  LEAD_CONVERSION: '/reports/lead-conversion/',
+  SALES_PERFORMANCE: '/reports/sales-performance/',
+},
 
   USERS: {
-    LIST: '/users/',
-    DETAIL: (id) => `/users/${id}/`,
+    LIST: '/auth/users/',
+    DETAIL: (id) => `/auth/users/${id}/`,
   },
 }
 

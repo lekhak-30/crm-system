@@ -1,10 +1,9 @@
-
 from django.conf import settings
 from django.middleware.csrf import get_token
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
 
-from rest_framework import generics, status
+from rest_framework import generics, status, serializers
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -14,9 +13,12 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 
+from drf_spectacular.utils import extend_schema, inline_serializer
+
 from .models import User
 from .serializers import (
     UserProfileSerializer,
+    AdminUserSerializer,
     CustomTokenObtainPairSerializer,
 )
 from .permissions import IsAdministrator
@@ -45,6 +47,14 @@ def clear_refresh_cookie(response):
 class CSRFTokenView(APIView):
     permission_classes = [AllowAny]
 
+    @extend_schema(
+        responses=inline_serializer(
+            name="CSRFTokenResponse",
+            fields={
+                "csrfToken": serializers.CharField(),
+            },
+        )
+    )
     @method_decorator(ensure_csrf_cookie)
     def get(self, request):
         return Response({"csrfToken": get_token(request)})
@@ -72,6 +82,23 @@ class LoginView(TokenObtainPairView):
 class RefreshTokenView(APIView):
     permission_classes = [AllowAny]
 
+    @extend_schema(
+        request=None,
+        responses={
+            200: inline_serializer(
+                name="RefreshTokenResponse",
+                fields={
+                    "access": serializers.CharField(),
+                },
+            ),
+            401: inline_serializer(
+                name="RefreshTokenErrorResponse",
+                fields={
+                    "detail": serializers.CharField(),
+                },
+            ),
+        },
+    )
     def post(self, request):
         refresh_token = request.COOKIES.get(
             settings.REFRESH_COOKIE_NAME
@@ -98,6 +125,7 @@ class RefreshTokenView(APIView):
             return response
 
         data = serializer.validated_data
+
         response = Response(
             {"access": data["access"]},
             status=status.HTTP_200_OK,
@@ -115,6 +143,17 @@ class RefreshTokenView(APIView):
 class LogoutView(APIView):
     permission_classes = [AllowAny]
 
+    @extend_schema(
+        request=None,
+        responses={
+            200: inline_serializer(
+                name="LogoutResponse",
+                fields={
+                    "detail": serializers.CharField(),
+                },
+            ),
+        },
+    )
     def post(self, request):
         refresh_token = request.COOKIES.get(
             settings.REFRESH_COOKIE_NAME
@@ -144,8 +183,73 @@ class CurrentUserView(generics.RetrieveAPIView):
         return self.request.user
 
 
-class AdminUserListView(generics.ListAPIView):
-    serializer_class = UserProfileSerializer
+class AdminUserListView(generics.ListCreateAPIView):
+    serializer_class = AdminUserSerializer
     permission_classes = [IsAuthenticated, IsAdministrator]
-
     queryset = User.objects.all().order_by("id")
+
+
+class AdminUserDetailView(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = AdminUserSerializer
+    permission_classes = [IsAuthenticated, IsAdministrator]
+    queryset = User.objects.all()
+
+    def perform_update(self, serializer):
+        user = self.get_object()
+
+        new_role = serializer.validated_data.get(
+            "role",
+            user.role,
+        )
+        new_active = serializer.validated_data.get(
+            "is_active",
+            user.is_active,
+        )
+
+        if user.pk == self.request.user.pk and not new_active:
+            raise serializers.ValidationError(
+                "You cannot deactivate your own account."
+            )
+
+        is_active_admin_after_update = (
+            new_role == User.Role.ADMIN and new_active
+        )
+
+        if (
+            user.role == User.Role.ADMIN
+            and user.is_active
+            and not is_active_admin_after_update
+        ):
+            active_admins = User.objects.filter(
+                role=User.Role.ADMIN,
+                is_active=True,
+            ).count()
+
+            if active_admins <= 1:
+                raise serializers.ValidationError(
+                    "You cannot deactivate or demote the last active administrator."
+                )
+
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        if instance.pk == self.request.user.pk:
+            raise serializers.ValidationError(
+                "You cannot delete your own account."
+            )
+
+        if (
+            instance.role == User.Role.ADMIN
+            and instance.is_active
+        ):
+            active_admins = User.objects.filter(
+                role=User.Role.ADMIN,
+                is_active=True,
+            ).count()
+
+            if active_admins <= 1:
+                raise serializers.ValidationError(
+                    "You cannot delete the last active administrator."
+                )
+
+        instance.delete()

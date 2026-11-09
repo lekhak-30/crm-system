@@ -1,5 +1,5 @@
 
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Plus,
   Search,
@@ -13,267 +13,369 @@ import {
   X,
   CheckCircle,
   ListTodo,
+  RefreshCw,
+  Eye,
 } from 'lucide-react'
+import api from '../../services/api'
+import { useSettings } from '../../context/SettingsContext'
+import { formatDate, formatDateTime } from '../../utils/date'
 
-const initialActivities = [
-  {
-    id: 1,
-    title: 'Follow up with John Smith',
-    description: 'Discuss website development requirements.',
-    type: 'Call',
-    relatedTo: 'Tech Solutions',
-    assignedTo: 'Admin User',
-    priority: 'High',
-    dueDate: '2026-11-07',
-    status: 'Pending',
-  },
-  {
-    id: 2,
-    title: 'Product demonstration',
-    description: 'Demonstrate the CRM platform to the client.',
-    type: 'Meeting',
-    relatedTo: 'Digital Works',
-    assignedTo: 'Sales Employee',
-    priority: 'High',
-    dueDate: '2026-11-08',
-    status: 'Pending',
-  },
-  {
-    id: 3,
-    title: 'Send pricing proposal',
-    description: 'Email the updated pricing proposal.',
-    type: 'Email',
-    relatedTo: 'Global Systems',
-    assignedTo: 'Admin User',
-    priority: 'Medium',
-    dueDate: '2026-11-09',
-    status: 'Pending',
-  },
-  {
-    id: 4,
-    title: 'Update customer information',
-    description: 'Verify customer contact details.',
-    type: 'Task',
-    relatedTo: 'Creative Studio',
-    assignedTo: 'Sales Employee',
-    priority: 'Low',
-    dueDate: '2026-11-05',
-    status: 'Completed',
-  },
-  {
-    id: 5,
-    title: 'Discuss contract terms',
-    description: 'Review the final contract conditions.',
-    type: 'Call',
-    relatedTo: 'Wilson Enterprises',
-    assignedTo: 'Admin User',
-    priority: 'High',
-    dueDate: '2026-11-04',
-    status: 'Pending',
-  },
-  {
-    id: 6,
-    title: 'Prepare sales report',
-    description: 'Prepare the weekly sales performance report.',
-    type: 'Task',
-    relatedTo: 'Internal',
-    assignedTo: 'Sales Employee',
-    priority: 'Medium',
-    dueDate: '2026-11-12',
-    status: 'Completed',
-  },
+const ACTIVITY_URL = '/activities/'
+
+const ACTIVITY_TYPES = [
+  { value: 'CALL', label: 'Call' },
+  { value: 'MEETING', label: 'Meeting' },
+  { value: 'EMAIL', label: 'Email' },
+  { value: 'TASK', label: 'Task' },
+  { value: 'FOLLOW_UP', label: 'Follow-up' },
+]
+
+const PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'URGENT']
+
+const STATUSES = [
+  { value: 'PLANNED', label: 'Planned' },
+  { value: 'IN_PROGRESS', label: 'In Progress' },
+  { value: 'COMPLETED', label: 'Completed' },
+  { value: 'CANCELLED', label: 'Cancelled' },
 ]
 
 const emptyForm = {
-  title: '',
+  subject: '',
   description: '',
-  type: 'Call',
-  relatedTo: '',
-  assignedTo: 'Admin User',
-  priority: 'Medium',
-  dueDate: '',
-  status: 'Pending',
+  activity_type: 'CALL',
+  priority: 'MEDIUM',
+  status: 'PLANNED',
+  due_at: '',
+  customer: '',
+  lead: '',
+  opportunity: '',
+}
+
+function getList(response) {
+  const data = response.data
+  return Array.isArray(data) ? data : data?.results || []
+}
+
+function getErrorMessage(error) {
+  const data = error.response?.data
+
+  if (!data) {
+    return error.message || 'Something went wrong.'
+  }
+
+  if (typeof data === 'string') return data
+  if (data.detail) return data.detail
+
+  return Object.entries(data)
+    .map(([field, messages]) => {
+      const message = Array.isArray(messages)
+        ? messages.join(', ')
+        : String(messages)
+
+      return `${field}: ${message}`
+    })
+    .join('\n')
+}
+
+function toLocalDateTime(value) {
+  if (!value) return ''
+
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) return ''
+
+  const offset = date.getTimezoneOffset() * 60000
+
+  return new Date(date.getTime() - offset)
+    .toISOString()
+    .slice(0, 16)
+}
+
+function isActivityOverdue(activity) {
+  if (!['PLANNED', 'IN_PROGRESS'].includes(activity.status)) {
+    return false
+  }
+
+  if (!activity.due_at) return false
+
+  const dueTime = new Date(activity.due_at).getTime()
+
+  return Number.isFinite(dueTime) && dueTime < Date.now()
+}
+
+function getRelatedName(activity) {
+  return (
+    activity.customer_name ||
+    activity.lead_name ||
+    activity.opportunity_name ||
+    'Internal activity'
+  )
+}
+
+function getTypeLabel(value) {
+  return ACTIVITY_TYPES.find((type) => type.value === value)?.label || value
+}
+
+function getStatusLabel(value) {
+  return STATUSES.find((status) => status.value === value)?.label || value
+}
+
+function getRecordName(record) {
+  return (
+    record.company_name ||
+    record.name ||
+    record.title ||
+    [record.first_name, record.last_name].filter(Boolean).join(' ') ||
+    `Record #${record.id}`
+  )
 }
 
 function Activities() {
-  const [activities, setActivities] = useState(initialActivities)
+  const { settings } = useSettings()
+  const dateFormat = settings.dateFormat || 'DD/MM/YYYY'
+
+  const [activities, setActivities] = useState([])
+  const [customers, setCustomers] = useState([])
+  const [leads, setLeads] = useState([])
+  const [opportunities, setOpportunities] = useState([])
+
   const [search, setSearch] = useState('')
-  const [typeFilter, setTypeFilter] = useState('All')
-  const [statusFilter, setStatusFilter] = useState('All')
+  const [typeFilter, setTypeFilter] = useState('ALL')
+  const [statusFilter, setStatusFilter] = useState('ALL')
+
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
   const [modalOpen, setModalOpen] = useState(false)
   const [editingActivity, setEditingActivity] = useState(null)
   const [selectedActivity, setSelectedActivity] = useState(null)
-  const [form, setForm] = useState(emptyForm)
-  const [errors, setErrors] = useState({})
 
-  const today = new Date().toISOString().slice(0, 10)
+  const [form, setForm] = useState(emptyForm)
+
+  const loadData = useCallback(async () => {
+    setLoading(true)
+    setError('')
+
+    try {
+      const [
+        activityResponse,
+        customerResponse,
+        leadResponse,
+        opportunityResponse,
+      ] = await Promise.all([
+        api.get(ACTIVITY_URL),
+        api.get('/customers/'),
+        api.get('/leads/'),
+        api.get('/opportunities/'),
+      ])
+
+      setActivities(getList(activityResponse))
+      setCustomers(getList(customerResponse))
+      setLeads(getList(leadResponse))
+      setOpportunities(getList(opportunityResponse))
+    } catch (err) {
+      setError(getErrorMessage(err))
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadData()
+  }, [loadData])
 
   const filteredActivities = useMemo(() => {
     const query = search.toLowerCase()
 
     return activities.filter((activity) => {
-      const matchesSearch =
-        activity.title.toLowerCase().includes(query) ||
-        activity.relatedTo.toLowerCase().includes(query) ||
-        activity.assignedTo.toLowerCase().includes(query)
+      const matchesSearch = [
+        activity.subject,
+        activity.description,
+        getRelatedName(activity),
+        activity.assigned_to_name,
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(query))
 
       const matchesType =
-        typeFilter === 'All' || activity.type === typeFilter
+        typeFilter === 'ALL' || activity.activity_type === typeFilter
 
       const matchesStatus =
-        statusFilter === 'All' || activity.status === statusFilter
+        statusFilter === 'ALL' || activity.status === statusFilter
 
       return matchesSearch && matchesType && matchesStatus
     })
   }, [activities, search, typeFilter, statusFilter])
 
   const pendingCount = activities.filter(
-    (activity) => activity.status === 'Pending'
+    (activity) =>
+      activity.status === 'PLANNED' ||
+      activity.status === 'IN_PROGRESS'
   ).length
 
   const completedCount = activities.filter(
-    (activity) => activity.status === 'Completed'
+    (activity) => activity.status === 'COMPLETED'
   ).length
 
-  const overdueCount = activities.filter(
-    (activity) =>
-      activity.status === 'Pending' &&
-      activity.dueDate < today
-  ).length
+  const overdueCount = activities.filter(isActivityOverdue).length
 
   const openAddModal = () => {
     setEditingActivity(null)
     setForm({ ...emptyForm })
-    setErrors({})
+    setError('')
     setModalOpen(true)
   }
 
   const openEditModal = (activity) => {
     setEditingActivity(activity)
-    setForm({ ...activity })
-    setErrors({})
+
+    setForm({
+      subject: activity.subject || '',
+      description: activity.description || '',
+      activity_type: activity.activity_type || 'CALL',
+      priority: activity.priority || 'MEDIUM',
+      status: activity.status || 'PLANNED',
+      due_at: toLocalDateTime(activity.due_at),
+      customer: activity.customer ? String(activity.customer) : '',
+      lead: activity.lead ? String(activity.lead) : '',
+      opportunity: activity.opportunity
+        ? String(activity.opportunity)
+        : '',
+    })
+
+    setError('')
     setModalOpen(true)
   }
 
   const closeModal = () => {
+    if (saving) return
+
     setModalOpen(false)
     setEditingActivity(null)
     setForm({ ...emptyForm })
-    setErrors({})
+    setError('')
   }
 
   const updateForm = (event) => {
     const { name, value } = event.target
 
-    setForm((previous) => ({
-      ...previous,
-      [name]: value,
-    }))
+    setForm((previous) => {
+      const updated = { ...previous, [name]: value }
 
-    setErrors((previous) => ({
-      ...previous,
-      [name]: '',
-    }))
+      if (['customer', 'lead', 'opportunity'].includes(name) && value) {
+        updated.customer = name === 'customer' ? value : ''
+        updated.lead = name === 'lead' ? value : ''
+        updated.opportunity = name === 'opportunity' ? value : ''
+      }
+
+      return updated
+    })
   }
 
   const validateForm = () => {
-    const newErrors = {}
+    if (!form.subject.trim()) return 'Activity subject is required.'
 
-    if (!form.title.trim()) {
-      newErrors.title = 'Activity title is required.'
-    } else if (form.title.trim().length < 3) {
-      newErrors.title = 'Title must contain at least 3 characters.'
+    if (form.subject.trim().length < 3) {
+      return 'Subject must contain at least 3 characters.'
     }
 
-    if (!form.relatedTo.trim()) {
-      newErrors.relatedTo = 'Related customer or lead is required.'
+    if (!form.due_at) return 'Due date and time are required.'
+
+    if (!form.customer && !form.lead && !form.opportunity) {
+      return 'Select a customer, lead, or opportunity.'
     }
 
-    if (!form.dueDate) {
-      newErrors.dueDate = 'Due date is required.'
-    } else {
-      const selectedDate = new Date(`${form.dueDate}T00:00:00`)
-
-      if (Number.isNaN(selectedDate.getTime())) {
-        newErrors.dueDate = 'Please enter a valid due date.'
-      } else if (
-        form.status === 'Pending' &&
-        form.dueDate < today &&
-        form.dueDate !== editingActivity?.dueDate
-      ) {
-        newErrors.dueDate =
-          'A new pending activity cannot have a past due date.'
-      }
-    }
-
-    return newErrors
+    return ''
   }
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault()
 
-    const validationErrors = validateForm()
-    setErrors(validationErrors)
+    const validationError = validateForm()
 
-    if (Object.keys(validationErrors).length > 0) {
+    if (validationError) {
+      setError(validationError)
       return
     }
 
-    const cleanedForm = {
-      ...form,
-      title: form.title.trim(),
+    const payload = {
+      subject: form.subject.trim(),
       description: form.description.trim(),
-      relatedTo: form.relatedTo.trim(),
+      activity_type: form.activity_type,
+      priority: form.priority,
+      status: form.status,
+      due_at: new Date(form.due_at).toISOString(),
+      customer: form.customer || null,
+      lead: form.lead || null,
+      opportunity: form.opportunity || null,
     }
 
-    if (editingActivity) {
-      setActivities((previous) =>
-        previous.map((activity) =>
-          activity.id === editingActivity.id
-            ? { ...activity, ...cleanedForm }
-            : activity
+    setSaving(true)
+    setError('')
+
+    try {
+      if (editingActivity) {
+        await api.patch(
+          `${ACTIVITY_URL}${editingActivity.id}/`,
+          payload
         )
-      )
-    } else {
-      const newActivity = {
-        ...cleanedForm,
-        id: Math.max(0, ...activities.map((activity) => activity.id)) + 1,
+      } else {
+        await api.post(ACTIVITY_URL, payload)
       }
 
-      setActivities((previous) => [newActivity, ...previous])
+      setModalOpen(false)
+      setEditingActivity(null)
+      setForm({ ...emptyForm })
+
+      await loadData()
+    } catch (err) {
+      setError(getErrorMessage(err))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const toggleCompletion = async (activity) => {
+    if (activity.status === 'COMPLETED') {
+      setError(
+        'The backend completion action only completes activities. Reopening is not supported by this action.'
+      )
+      return
     }
 
-    closeModal()
-  }
+    if (activity.status === 'CANCELLED') {
+      setError('Cancelled activities cannot be completed.')
+      return
+    }
 
-  const toggleCompletion = (id) => {
-    setActivities((previous) =>
-      previous.map((activity) =>
-        activity.id === id
-          ? {
-              ...activity,
-              status:
-                activity.status === 'Completed'
-                  ? 'Pending'
-                  : 'Completed',
-            }
-          : activity
+    try {
+      setError('')
+
+      await api.post(
+        `${ACTIVITY_URL}${activity.id}/complete/`
       )
-    )
+
+      await loadData()
+    } catch (err) {
+      setError(getErrorMessage(err))
+    }
   }
 
-  const deleteActivity = (id) => {
-    if (!window.confirm('Delete this activity?')) return
+  const deleteActivity = async (id) => {
+    if (!window.confirm('Delete this activity permanently?')) return
 
-    setActivities((previous) =>
-      previous.filter((activity) => activity.id !== id)
-    )
+    try {
+      setError('')
+      await api.delete(`${ACTIVITY_URL}${id}/`)
+      await loadData()
+    } catch (err) {
+      setError(getErrorMessage(err))
+    }
   }
 
   return (
     <div className="space-y-6">
-
-      {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">
@@ -284,16 +386,38 @@ function Activities() {
           </p>
         </div>
 
-        <button
-          onClick={openAddModal}
-          className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700"
-        >
-          <Plus size={18} />
-          Add Activity
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={loadData}
+            disabled={loading}
+            className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+          >
+            <RefreshCw size={17} />
+            Refresh
+          </button>
+
+          <button
+            onClick={openAddModal}
+            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700"
+          >
+            <Plus size={18} />
+            Add Activity
+          </button>
+        </div>
       </div>
 
-      {/* Summary cards */}
+      {error && (
+        <div className="flex items-start justify-between gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <p className="whitespace-pre-line">{error}</p>
+          <button
+            onClick={() => setError('')}
+            aria-label="Dismiss error"
+          >
+            <X size={18} />
+          </button>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <SummaryCard
           title="Pending Activities"
@@ -317,7 +441,6 @@ function Activities() {
         />
       </div>
 
-      {/* Filters */}
       <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:flex-row">
         <div className="relative flex-1">
           <Search
@@ -337,29 +460,32 @@ function Activities() {
         <select
           value={typeFilter}
           onChange={(event) => setTypeFilter(event.target.value)}
-          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none"
+          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
           aria-label="Filter by activity type"
         >
-          <option value="All">All types</option>
-          <option value="Call">Calls</option>
-          <option value="Meeting">Meetings</option>
-          <option value="Email">Emails</option>
-          <option value="Task">Tasks</option>
+          <option value="ALL">All types</option>
+          {ACTIVITY_TYPES.map((type) => (
+            <option key={type.value} value={type.value}>
+              {type.label}
+            </option>
+          ))}
         </select>
 
         <select
           value={statusFilter}
           onChange={(event) => setStatusFilter(event.target.value)}
-          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none"
+          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
           aria-label="Filter by activity status"
         >
-          <option value="All">All statuses</option>
-          <option value="Pending">Pending</option>
-          <option value="Completed">Completed</option>
+          <option value="ALL">All statuses</option>
+          {STATUSES.map((status) => (
+            <option key={status.value} value={status.value}>
+              {status.label}
+            </option>
+          ))}
         </select>
       </div>
 
-      {/* Activity list */}
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-100 p-5">
           <h2 className="font-semibold text-slate-800">
@@ -370,44 +496,43 @@ function Activities() {
           </p>
         </div>
 
-        <div className="divide-y divide-slate-100">
-          {filteredActivities.map((activity) => (
-            <ActivityRow
-              key={activity.id}
-              activity={activity}
-              onView={() => setSelectedActivity(activity)}
-              onEdit={() => openEditModal(activity)}
-              onDelete={() => deleteActivity(activity.id)}
-              onToggle={() => toggleCompletion(activity.id)}
+        {loading ? (
+          <div className="py-16 text-center text-sm text-slate-500">
+            Loading activities...
+          </div>
+        ) : filteredActivities.length === 0 ? (
+          <div className="px-5 py-12 text-center">
+            <ListTodo
+              size={32}
+              className="mx-auto mb-3 text-slate-300"
             />
-          ))}
-
-          {filteredActivities.length === 0 && (
-            <div className="px-5 py-12 text-center">
-              <ListTodo
-                size={32}
-                className="mx-auto mb-3 text-slate-300"
+            <p className="text-sm font-medium text-slate-600">
+              No activities found
+            </p>
+            <p className="mt-1 text-xs text-slate-400">
+              Try changing your search or filters, or add an activity.
+            </p>
+          </div>
+        ) : (
+          <div className="divide-y divide-slate-100">
+            {filteredActivities.map((activity) => (
+              <ActivityRow
+                key={activity.id}
+                activity={activity}
+                dateFormat={dateFormat}
+                onView={() => setSelectedActivity(activity)}
+                onEdit={() => openEditModal(activity)}
+                onDelete={() => deleteActivity(activity.id)}
+                onToggle={() => toggleCompletion(activity)}
               />
-              <p className="text-sm font-medium text-slate-600">
-                No activities found
-              </p>
-              <p className="mt-1 text-xs text-slate-400">
-                Try changing your search or filters.
-              </p>
-            </div>
-          )}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
-      <p className="text-xs text-slate-400">
-        Sample activities are stored in local React state. They are not
-        connected to the Django database.
-      </p>
-
-      {/* Add / Edit modal */}
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/40 p-4">
-          <div className="my-auto w-full max-w-lg rounded-xl bg-white shadow-xl">
+          <div className="my-auto w-full max-w-2xl rounded-xl bg-white shadow-xl">
             <div className="flex items-center justify-between border-b border-slate-100 p-5">
               <h2 className="text-lg font-semibold text-slate-800">
                 {editingActivity ? 'Edit Activity' : 'Add New Activity'}
@@ -416,6 +541,7 @@ function Activities() {
               <button
                 type="button"
                 onClick={closeModal}
+                disabled={saving}
                 className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"
                 aria-label="Close form"
               >
@@ -423,14 +549,16 @@ function Activities() {
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} noValidate className="space-y-4 p-5">
+            <form
+              onSubmit={handleSubmit}
+              className="space-y-4 p-5"
+            >
               <ActivityField
-                label="Activity Title"
-                name="title"
-                value={form.title}
+                label="Activity Subject"
+                name="subject"
+                value={form.subject}
                 onChange={updateForm}
                 required
-                error={errors.title}
               />
 
               <div>
@@ -446,7 +574,7 @@ function Activities() {
                   name="description"
                   value={form.description}
                   onChange={updateForm}
-                  rows="3"
+                  rows={3}
                   className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
                 />
               </div>
@@ -454,10 +582,13 @@ function Activities() {
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <ActivitySelect
                   label="Activity Type"
-                  name="type"
-                  value={form.type}
+                  name="activity_type"
+                  value={form.activity_type}
                   onChange={updateForm}
-                  options={['Call', 'Meeting', 'Email', 'Task']}
+                  options={ACTIVITY_TYPES.map((item) => ({
+                    value: item.value,
+                    label: item.label,
+                  }))}
                 />
 
                 <ActivitySelect
@@ -465,34 +596,10 @@ function Activities() {
                   name="priority"
                   value={form.priority}
                   onChange={updateForm}
-                  options={['Low', 'Medium', 'High']}
-                />
-
-                <ActivityField
-                  label="Related Customer / Lead"
-                  name="relatedTo"
-                  value={form.relatedTo}
-                  onChange={updateForm}
-                  required
-                  error={errors.relatedTo}
-                />
-
-                <ActivitySelect
-                  label="Assigned To"
-                  name="assignedTo"
-                  value={form.assignedTo}
-                  onChange={updateForm}
-                  options={['Admin User', 'Sales Employee']}
-                />
-
-                <ActivityField
-                  label="Due Date"
-                  name="dueDate"
-                  type="date"
-                  value={form.dueDate}
-                  onChange={updateForm}
-                  required
-                  error={errors.dueDate}
+                  options={PRIORITIES.map((value) => ({
+                    value,
+                    label: value,
+                  }))}
                 />
 
                 <ActivitySelect
@@ -500,24 +607,97 @@ function Activities() {
                   name="status"
                   value={form.status}
                   onChange={updateForm}
-                  options={['Pending', 'Completed']}
+                  options={STATUSES.filter(
+                    (item) => item.value !== 'COMPLETED'
+                  ).map((item) => ({
+                    value: item.value,
+                    label: item.label,
+                  }))}
                 />
+
+                <ActivityField
+                  label="Due Date & Time"
+                  name="due_at"
+                  type="datetime-local"
+                  value={form.due_at}
+                  onChange={updateForm}
+                  required
+                />
+              </div>
+
+              <div className="border-t border-slate-100 pt-4">
+                <h3 className="mb-1 text-sm font-semibold text-slate-800">
+                  Link to a CRM Record
+                </h3>
+                <p className="mb-3 text-xs text-slate-500">
+                  Select one customer, lead, or opportunity.
+                </p>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <ActivitySelect
+                    label="Customer"
+                    name="customer"
+                    value={form.customer}
+                    onChange={updateForm}
+                    options={[
+                      { value: '', label: 'No customer selected' },
+                      ...customers.map((item) => ({
+                        value: String(item.id),
+                        label: getRecordName(item),
+                      })),
+                    ]}
+                  />
+
+                  <ActivitySelect
+                    label="Lead"
+                    name="lead"
+                    value={form.lead}
+                    onChange={updateForm}
+                    options={[
+                      { value: '', label: 'No lead selected' },
+                      ...leads.map((item) => ({
+                        value: String(item.id),
+                        label: getRecordName(item),
+                      })),
+                    ]}
+                  />
+
+                  <ActivitySelect
+                    label="Opportunity"
+                    name="opportunity"
+                    value={form.opportunity}
+                    onChange={updateForm}
+                    options={[
+                      { value: '', label: 'No opportunity selected' },
+                      ...opportunities.map((item) => ({
+                        value: String(item.id),
+                        label: getRecordName(item),
+                      })),
+                    ]}
+                  />
+                </div>
               </div>
 
               <div className="flex justify-end gap-3 border-t border-slate-100 pt-4">
                 <button
                   type="button"
                   onClick={closeModal}
-                  className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50"
+                  disabled={saving}
+                  className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50"
                 >
                   Cancel
                 </button>
 
                 <button
                   type="submit"
-                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                  disabled={saving}
+                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
                 >
-                  {editingActivity ? 'Save Changes' : 'Add Activity'}
+                  {saving
+                    ? 'Saving...'
+                    : editingActivity
+                      ? 'Save Changes'
+                      : 'Add Activity'}
                 </button>
               </div>
             </form>
@@ -525,7 +705,6 @@ function Activities() {
         </div>
       )}
 
-      {/* Activity details modal */}
       {selectedActivity && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
           <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
@@ -544,25 +723,39 @@ function Activities() {
             </div>
 
             <div className="space-y-4">
-              {Object.entries({
-                Title: selectedActivity.title,
-                Description: selectedActivity.description || 'No description',
-                Type: selectedActivity.type,
-                RelatedTo: selectedActivity.relatedTo,
-                AssignedTo: selectedActivity.assignedTo,
-                Priority: selectedActivity.priority,
-                DueDate: selectedActivity.dueDate,
-                Status: selectedActivity.status,
-              }).map(([label, value]) => (
-                <div key={label}>
-                  <p className="text-xs font-medium uppercase text-slate-400">
-                    {label.replace(/([A-Z])/g, ' $1')}
-                  </p>
-                  <p className="mt-1 text-sm text-slate-700">
-                    {value}
-                  </p>
-                </div>
-              ))}
+              <Detail label="Subject" value={selectedActivity.subject} />
+              <Detail
+                label="Description"
+                value={selectedActivity.description || 'No description'}
+              />
+              <Detail
+                label="Type"
+                value={getTypeLabel(selectedActivity.activity_type)}
+              />
+              <Detail
+                label="Related Record"
+                value={getRelatedName(selectedActivity)}
+              />
+              <Detail
+                label="Assigned To"
+                value={selectedActivity.assigned_to_name || 'Not assigned'}
+              />
+              <Detail
+                label="Priority"
+                value={selectedActivity.priority}
+              />
+              <Detail
+                label="Due Date"
+                value={
+                  selectedActivity.due_at
+                    ? formatDateTime(selectedActivity.due_at, dateFormat)
+                    : 'Not set'
+                }
+              />
+              <Detail
+                label="Status"
+                value={getStatusLabel(selectedActivity.status)}
+              />
             </div>
 
             <button
@@ -594,29 +787,37 @@ function SummaryCard({ title, value, icon: Icon, color }) {
 
 function ActivityRow({
   activity,
+  dateFormat,
   onView,
   onEdit,
   onDelete,
   onToggle,
 }) {
   const typeIcons = {
-    Call: Phone,
-    Meeting: CalendarDays,
-    Email: Mail,
-    Task: CheckSquare,
+    CALL: Phone,
+    MEETING: CalendarDays,
+    EMAIL: Mail,
+    TASK: CheckSquare,
+    FOLLOW_UP: Clock,
   }
 
-  const Icon = typeIcons[activity.type]
+  const Icon = typeIcons[activity.activity_type] || ListTodo
 
   const priorityStyles = {
-    High: 'bg-red-50 text-red-700',
-    Medium: 'bg-amber-50 text-amber-700',
-    Low: 'bg-slate-100 text-slate-600',
+    URGENT: 'bg-red-100 text-red-800',
+    HIGH: 'bg-red-50 text-red-700',
+    MEDIUM: 'bg-amber-50 text-amber-700',
+    LOW: 'bg-slate-100 text-slate-600',
   }
 
-  const isOverdue =
-    activity.status === 'Pending' &&
-    activity.dueDate < new Date().toISOString().slice(0, 10)
+  const statusStyles = {
+    COMPLETED: 'bg-green-50 text-green-700',
+    PLANNED: 'bg-blue-50 text-blue-700',
+    IN_PROGRESS: 'bg-amber-50 text-amber-700',
+    CANCELLED: 'bg-slate-100 text-slate-600',
+  }
+
+  const isOverdue = isActivityOverdue(activity)
 
   return (
     <div className="flex flex-col gap-4 p-5 transition hover:bg-slate-50 sm:flex-row sm:items-center">
@@ -630,47 +831,72 @@ function ActivityRow({
             onClick={onView}
             className="text-left text-sm font-semibold text-slate-800 hover:text-blue-600"
           >
-            {activity.title}
+            {activity.subject}
           </button>
 
           <p className="mt-1 text-xs text-slate-500">
-            {activity.description}
+            {activity.description || 'No description'}
           </p>
 
           <p className="mt-2 text-xs text-slate-400">
-            {activity.type} · {activity.relatedTo} · {activity.assignedTo}
+            {getTypeLabel(activity.activity_type)} · {getRelatedName(activity)} ·{' '}
+            {activity.assigned_to_name || 'Unassigned'}
           </p>
         </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-3 sm:justify-end">
-        <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${priorityStyles[activity.priority]}`}>
+        <span
+          className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+            priorityStyles[activity.priority] || priorityStyles.LOW
+          }`}
+        >
           {activity.priority}
         </span>
 
-        <span className={`text-xs font-medium ${isOverdue ? 'text-red-600' : 'text-slate-500'}`}>
-          {activity.dueDate}
+        <span
+          className={`text-xs font-medium ${
+            isOverdue ? 'text-red-600' : 'text-slate-500'
+          }`}
+        >
+          {activity.due_at
+            ? formatDate(activity.due_at, dateFormat)
+            : 'No due date'}
           {isOverdue && ' · Overdue'}
         </span>
 
-        <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${
-          activity.status === 'Completed'
-            ? 'bg-green-50 text-green-700'
-            : 'bg-blue-50 text-blue-700'
-        }`}>
-          {activity.status}
+        <span
+          className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+            statusStyles[activity.status] || statusStyles.PLANNED
+          }`}
+        >
+          {getStatusLabel(activity.status)}
         </span>
 
         <div className="flex gap-1">
-          <RowAction label="Toggle completion" onClick={onToggle}>
-            <CheckCircle size={17} />
+          {activity.status !== 'COMPLETED' &&
+            activity.status !== 'CANCELLED' && (
+              <RowAction
+                label="Complete activity"
+                onClick={onToggle}
+              >
+                <CheckCircle size={17} />
+              </RowAction>
+            )}
+
+          <RowAction label="View activity" onClick={onView}>
+            <Eye size={17} />
           </RowAction>
 
           <RowAction label="Edit activity" onClick={onEdit}>
             <Pencil size={17} />
           </RowAction>
 
-          <RowAction label="Delete activity" onClick={onDelete} danger>
+          <RowAction
+            label="Delete activity"
+            onClick={onDelete}
+            danger
+          >
             <Trash2 size={17} />
           </RowAction>
         </div>
@@ -704,7 +930,6 @@ function ActivityField({
   onChange,
   type = 'text',
   required = false,
-  error,
 }) {
   return (
     <div>
@@ -723,18 +948,8 @@ function ActivityField({
         value={value}
         onChange={onChange}
         required={required}
-        aria-invalid={Boolean(error)}
-        aria-describedby={error ? `${name}-error` : undefined}
-        className={`w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:border-blue-500 ${
-          error ? 'border-red-500 focus:border-red-500' : 'border-slate-200'
-        }`}
+        className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
       />
-
-      {error && (
-        <p id={`${name}-error`} className="mt-1 text-xs text-red-600">
-          {error}
-        </p>
-      )}
     </div>
   )
 }
@@ -757,11 +972,24 @@ function ActivitySelect({ label, name, value, onChange, options }) {
         className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500"
       >
         {options.map((option) => (
-          <option key={option} value={option}>
-            {option}
+          <option key={option.value} value={option.value}>
+            {option.label}
           </option>
         ))}
       </select>
+    </div>
+  )
+}
+
+function Detail({ label, value }) {
+  return (
+    <div>
+      <p className="text-xs font-medium uppercase text-slate-400">
+        {label}
+      </p>
+      <p className="mt-1 text-sm text-slate-700">
+        {value || '—'}
+      </p>
     </div>
   )
 }

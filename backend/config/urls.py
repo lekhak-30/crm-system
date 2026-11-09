@@ -1,3 +1,4 @@
+﻿
 from django.contrib import admin
 from django.http import HttpResponse
 from django.urls import path, include
@@ -16,11 +17,18 @@ def home(request):
 urlpatterns = [
     path("", home, name="home"),
     path("admin/", admin.site.urls),
+    path("api/v1/leads/", include("apps.leads.urls")),
+    path("api/v1/opportunities/", include("apps.opportunities.urls")),
+    path("api/v1/reports/", include("apps.reports.urls")),
+    path("api/v1/activities/", include("apps.activities.urls")),
 
     # Authentication APIs
     path("api/v1/auth/", include("apps.accounts.urls")),
 
-    # API documentation
+    # Customer APIs
+    path("api/v1/customers/", include("apps.customers.urls")),
+
+    # API Documentation
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path(
         "api/docs/",

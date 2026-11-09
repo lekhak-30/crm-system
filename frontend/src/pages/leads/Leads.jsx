@@ -1,6 +1,5 @@
 
-import { useMemo, useState } from 'react'
-import { isRequired, isValidEmail, isValidPhone } from '../../utils/validators'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Search,
   Plus,
@@ -13,243 +12,203 @@ import {
   UserRoundPlus,
   CheckCircle,
   TrendingUp,
+  RefreshCw,
 } from 'lucide-react'
 
-const initialLeads = [
-  {
-    id: 1,
-    name: 'Robert Wilson',
-    email: 'robert@example.com',
-    company: 'Wilson Technologies',
-    phone: '+1 202 555 0201',
-    source: 'Website',
-    status: 'New',
-    assignedTo: 'Admin User',
-    value: 5000,
-  },
-  {
-    id: 2,
-    name: 'Jennifer Taylor',
-    email: 'jennifer@example.com',
-    company: 'Taylor Solutions',
-    phone: '+1 202 555 0202',
-    source: 'Referral',
-    status: 'Contacted',
-    assignedTo: 'Sales Employee',
-    value: 8500,
-  },
-  {
-    id: 3,
-    name: 'Daniel Thomas',
-    email: 'daniel@example.com',
-    company: 'Thomas Group',
-    phone: '+1 202 555 0203',
-    source: 'Social Media',
-    status: 'Qualified',
-    assignedTo: 'Sales Employee',
-    value: 12000,
-  },
-  {
-    id: 4,
-    name: 'Sophia Martinez',
-    email: 'sophia@example.com',
-    company: 'Martinez Digital',
-    phone: '+1 202 555 0204',
-    source: 'Website',
-    status: 'Proposal',
-    assignedTo: 'Admin User',
-    value: 15000,
-  },
-  {
-    id: 5,
-    name: 'William Garcia',
-    email: 'william@example.com',
-    company: 'Garcia Enterprises',
-    phone: '+1 202 555 0205',
-    source: 'Referral',
-    status: 'Converted',
-    assignedTo: 'Sales Employee',
-    value: 10000,
-  },
-  {
-    id: 6,
-    name: 'Isabella Moore',
-    email: 'isabella@example.com',
-    company: 'Moore Consulting',
-    phone: '+1 202 555 0206',
-    source: 'Other',
-    status: 'Lost',
-    assignedTo: 'Admin User',
-    value: 4000,
-  },
-]
+import api from '../../services/api'
+import API_ENDPOINTS from '../../services/endpoints'
 
 const statuses = [
-  'New',
-  'Contacted',
-  'Qualified',
-  'Proposal',
-  'Converted',
-  'Lost',
+  'NEW',
+  'CONTACTED',
+  'QUALIFIED',
+  'UNQUALIFIED',
+  'CONVERTED',
 ]
 
+const sources = [
+  'WEBSITE',
+  'REFERRAL',
+  'SOCIAL_MEDIA',
+  'EMAIL',
+  'PHONE',
+  'ADVERTISEMENT',
+  'OTHER',
+]
+
+const statusLabels = {
+  NEW: 'New',
+  CONTACTED: 'Contacted',
+  QUALIFIED: 'Qualified',
+  UNQUALIFIED: 'Unqualified',
+  CONVERTED: 'Converted',
+}
+
+const sourceLabels = {
+  WEBSITE: 'Website',
+  REFERRAL: 'Referral',
+  SOCIAL_MEDIA: 'Social Media',
+  EMAIL: 'Email',
+  PHONE: 'Phone',
+  ADVERTISEMENT: 'Advertisement',
+  OTHER: 'Other',
+}
+
 const emptyForm = {
-  name: '',
+  first_name: '',
+  last_name: '',
   email: '',
   company: '',
   phone: '',
-  source: 'Website',
-  status: 'New',
-  assignedTo: 'Admin User',
-  value: '',
+  source: 'WEBSITE',
+  status: 'NEW',
+}
+
+function getErrorMessage(error) {
+  const data = error.response?.data
+
+  if (!data) {
+    return 'Something went wrong. Please check your connection.'
+  }
+
+  if (typeof data.detail === 'string') {
+    return data.detail
+  }
+
+  if (typeof data === 'object') {
+    return Object.entries(data)
+      .map(([field, messages]) => {
+        const message = Array.isArray(messages)
+          ? messages.join(', ')
+          : String(messages)
+
+        return `${field}: ${message}`
+      })
+      .join(' | ')
+  }
+
+  return 'Request failed.'
+}
+
+function formatLead(lead) {
+  return {
+    ...lead,
+    name: `${lead.first_name || ''} ${lead.last_name || ''}`.trim(),
+    assignedTo:
+      lead.assigned_to_name ||
+      lead.assigned_to_username ||
+      'Unassigned',
+  }
 }
 
 function Leads() {
-  const [leads, setLeads] = useState(initialLeads)
+  const [leads, setLeads] = useState([])
+  const [totalCount, setTotalCount] = useState(0)
+
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('All')
+  const [currentPage, setCurrentPage] = useState(1)
+
   const [modalOpen, setModalOpen] = useState(false)
   const [editingLead, setEditingLead] = useState(null)
   const [selectedLead, setSelectedLead] = useState(null)
+
   const [form, setForm] = useState(emptyForm)
   const [errors, setErrors] = useState({})
-  const [currentPage, setCurrentPage] = useState(1)
 
-  const pageSize = 5
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [apiError, setApiError] = useState('')
 
-  const filteredLeads = useMemo(() => {
-    return leads.filter((lead) => {
-      const query = search.toLowerCase()
+  const pageSize = 10
 
-      const matchesSearch =
-        lead.name.toLowerCase().includes(query) ||
-        lead.email.toLowerCase().includes(query) ||
-        lead.company.toLowerCase().includes(query)
+  const fetchLeads = useCallback(async () => {
+    try {
+      setLoading(true)
+      setApiError('')
 
-      const matchesStatus =
-        statusFilter === 'All' || lead.status === statusFilter
+      const response = await api.get(API_ENDPOINTS.LEADS.LIST, {
+        params: {
+          page: currentPage,
+          search: search.trim() || undefined,
+        },
+      })
 
-      return matchesSearch && matchesStatus
-    })
-  }, [leads, search, statusFilter])
+      const data = response.data
+      const results = Array.isArray(data)
+        ? data
+        : data.results || []
+
+      setLeads(results.map(formatLead))
+      setTotalCount(data.count ?? results.length)
+    } catch (error) {
+      console.error('Failed to load leads:', error)
+      setApiError(getErrorMessage(error))
+    } finally {
+      setLoading(false)
+    }
+  }, [currentPage, search])
+
+  useEffect(() => {
+    fetchLeads()
+  }, [fetchLeads])
 
   const totalPages = Math.max(
     1,
-    Math.ceil(filteredLeads.length / pageSize)
+    Math.ceil(totalCount / pageSize)
   )
 
-  const paginatedLeads = filteredLeads.slice(
-    (currentPage - 1) * pageSize,
-    currentPage * pageSize
-  )
+  const filteredLeads = useMemo(() => {
+    if (statusFilter === 'All') {
+      return leads
+    }
 
-  const totalValue = leads
-    .filter((lead) => !['Converted', 'Lost'].includes(lead.status))
-    .reduce((total, lead) => total + Number(lead.value || 0), 0)
+    return leads.filter(
+      (lead) => lead.status === statusFilter
+    )
+  }, [leads, statusFilter])
+
+  const convertedLeads = leads.filter(
+    (lead) => lead.status === 'CONVERTED'
+  ).length
+
+  const activeLeads = totalCount - convertedLeads
+
+  const conversionRate = totalCount
+    ? Math.round((convertedLeads / totalCount) * 100)
+    : 0
 
   const openAddModal = () => {
     setEditingLead(null)
-    setForm(emptyForm)
+    setForm({ ...emptyForm })
     setErrors({})
+    setApiError('')
     setModalOpen(true)
   }
 
   const openEditModal = (lead) => {
     setEditingLead(lead)
-    setForm({ ...lead, value: String(lead.value) })
+
+    setForm({
+      first_name: lead.first_name || '',
+      last_name: lead.last_name || '',
+      email: lead.email || '',
+      company: lead.company || '',
+      phone: lead.phone || '',
+      source: lead.source || 'OTHER',
+      status: lead.status || 'NEW',
+    })
+
     setErrors({})
+    setApiError('')
     setModalOpen(true)
   }
 
   const closeModal = () => {
     setModalOpen(false)
     setEditingLead(null)
-    setForm(emptyForm)
+    setForm({ ...emptyForm })
     setErrors({})
-  }
-
-  const handleSubmit = (event) => {
-    event.preventDefault()
-
-    const validationErrors = {}
-
-    if (!isRequired(form.name)) {
-      validationErrors.name = 'Lead name is required'
-    }
-
-    if (!isRequired(form.email)) {
-      validationErrors.email = 'Email address is required'
-    } else if (!isValidEmail(form.email)) {
-      validationErrors.email = 'Enter a valid email address'
-    }
-
-    if (!isRequired(form.company)) {
-      validationErrors.company = 'Company name is required'
-    }
-
-    if (!isRequired(form.phone)) {
-      validationErrors.phone = 'Phone number is required'
-    } else if (!isValidPhone(form.phone)) {
-      validationErrors.phone = 'Enter a valid phone number'
-    }
-
-    const numericValue = Number(form.value)
-    if (!isRequired(form.value)) {
-      validationErrors.value = 'Estimated value is required'
-    } else if (!Number.isFinite(numericValue) || numericValue < 0) {
-      validationErrors.value = 'Enter a valid non-negative amount'
-    }
-
-    setErrors(validationErrors)
-
-    if (Object.keys(validationErrors).length > 0) {
-      return
-    }
-
-    if (editingLead) {
-      setLeads((previous) =>
-        previous.map((lead) =>
-          lead.id === editingLead.id
-            ? { ...lead, ...form, value: numericValue }
-            : lead
-        )
-      )
-    } else {
-      const newLead = {
-        ...form,
-        id: Math.max(0, ...leads.map((lead) => lead.id)) + 1,
-        value: numericValue,
-      }
-
-      setLeads((previous) => [newLead, ...previous])
-      setCurrentPage(1)
-    }
-
-    closeModal()
-  }
-
-  const handleDelete = (id) => {
-    if (!window.confirm('Are you sure you want to delete this lead?')) {
-      return
-    }
-
-    setLeads((previous) =>
-      previous.filter((lead) => lead.id !== id)
-    )
-  }
-
-  const handleConvert = (lead) => {
-    if (!window.confirm(`Convert ${lead.name} into a customer?`)) {
-      return
-    }
-
-    setLeads((previous) =>
-      previous.map((item) =>
-        item.id === lead.id
-          ? { ...item, status: 'Converted' }
-          : item
-      )
-    )
   }
 
   const updateForm = (event) => {
@@ -266,6 +225,127 @@ function Leads() {
     }))
   }
 
+  const validateForm = () => {
+    const newErrors = {}
+
+    if (!form.first_name.trim()) {
+      newErrors.first_name = 'First name is required.'
+    }
+
+    if (!form.last_name.trim()) {
+      newErrors.last_name = 'Last name is required.'
+    }
+
+    if (!form.email.trim()) {
+      newErrors.email = 'Email address is required.'
+    } else if (
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())
+    ) {
+      newErrors.email = 'Enter a valid email address.'
+    }
+
+    return newErrors
+  }
+
+  const handleSubmit = async (event) => {
+    event.preventDefault()
+
+    const validationErrors = validateForm()
+    setErrors(validationErrors)
+
+    if (Object.keys(validationErrors).length > 0) {
+      return
+    }
+
+    const payload = {
+      first_name: form.first_name.trim(),
+      last_name: form.last_name.trim(),
+      email: form.email.trim(),
+      company: form.company.trim(),
+      phone: form.phone.trim(),
+      source: form.source,
+      status: form.status,
+    }
+
+    try {
+      setSaving(true)
+      setApiError('')
+
+      if (editingLead) {
+        await api.patch(
+          API_ENDPOINTS.LEADS.DETAIL(editingLead.id),
+          payload
+        )
+      } else {
+        await api.post(
+          API_ENDPOINTS.LEADS.LIST,
+          payload
+        )
+      }
+
+      closeModal()
+      setCurrentPage(1)
+
+      // Reload the list after saving.
+      if (currentPage === 1) {
+        await fetchLeads()
+      }
+    } catch (error) {
+      console.error('Lead save failed:', error)
+      setApiError(getErrorMessage(error))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDelete = async (id) => {
+    const confirmed = window.confirm(
+      'Are you sure you want to delete this lead?'
+    )
+
+    if (!confirmed) return
+
+    try {
+      setApiError('')
+
+      await api.delete(
+        API_ENDPOINTS.LEADS.DETAIL(id)
+      )
+
+      await fetchLeads()
+    } catch (error) {
+      console.error('Lead deletion failed:', error)
+      setApiError(getErrorMessage(error))
+    }
+  }
+
+  const handleConvert = async (lead) => {
+    if (lead.status !== 'QUALIFIED') {
+      setApiError('Only qualified leads can be converted.')
+      return
+    }
+
+    const confirmed = window.confirm(
+      `Convert ${lead.name} into a customer?`
+    )
+
+    if (!confirmed) return
+
+    try {
+      setApiError('')
+
+      await api.post(
+        API_ENDPOINTS.LEADS.CONVERT(lead.id)
+      )
+
+      setSelectedLead(null)
+      await fetchLeads()
+    } catch (error) {
+      console.error('Lead conversion failed:', error)
+      setApiError(getErrorMessage(error))
+    }
+  }
+
   const updateSearch = (value) => {
     setSearch(value)
     setCurrentPage(1)
@@ -275,18 +355,6 @@ function Leads() {
     setStatusFilter(value)
     setCurrentPage(1)
   }
-
-  const activeLeads = leads.filter(
-    (lead) => !['Converted', 'Lost'].includes(lead.status)
-  ).length
-
-  const convertedLeads = leads.filter(
-    (lead) => lead.status === 'Converted'
-  ).length
-
-  const conversionRate = leads.length
-    ? Math.round((convertedLeads / leads.length) * 100)
-    : 0
 
   return (
     <div className="space-y-6">
@@ -298,24 +366,54 @@ function Leads() {
             Leads
           </h1>
           <p className="mt-1 text-sm text-slate-500">
-            Track potential customers and manage your sales opportunities.
+            Track potential customers and manage your sales pipeline.
           </p>
         </div>
 
-        <button
-          onClick={openAddModal}
-          className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700"
-        >
-          <Plus size={18} />
-          Add Lead
-        </button>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={fetchLeads}
+            disabled={loading}
+            className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2.5 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+          >
+            <RefreshCw size={17} />
+            Refresh
+          </button>
+
+          <button
+            type="button"
+            onClick={openAddModal}
+            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700"
+          >
+            <Plus size={18} />
+            Add Lead
+          </button>
+        </div>
       </div>
+
+      {/* API error */}
+      {apiError && (
+        <div
+          role="alert"
+          className="flex items-start justify-between gap-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700"
+        >
+          <p>{apiError}</p>
+          <button
+            type="button"
+            onClick={() => setApiError('')}
+            aria-label="Dismiss error"
+          >
+            <X size={17} />
+          </button>
+        </div>
+      )}
 
       {/* Summary cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <SummaryCard
           title="Total Leads"
-          value={leads.length}
+          value={totalCount}
           description="All registered leads"
           icon={UserRoundPlus}
           color="text-blue-600 bg-blue-50"
@@ -324,7 +422,7 @@ function Leads() {
         <SummaryCard
           title="Active Leads"
           value={activeLeads}
-          description="Currently in sales pipeline"
+          description="Not yet converted"
           icon={TrendingUp}
           color="text-amber-600 bg-amber-50"
         />
@@ -332,23 +430,10 @@ function Leads() {
         <SummaryCard
           title="Conversion Rate"
           value={`${conversionRate}%`}
-          description={`${convertedLeads} converted leads`}
+          description={`${convertedLeads} converted on this page`}
           icon={CheckCircle}
           color="text-green-600 bg-green-50"
         />
-      </div>
-
-      {/* Pipeline value */}
-      <div className="rounded-xl border border-blue-100 bg-blue-50 p-5">
-        <p className="text-sm font-medium text-blue-700">
-          Active Pipeline Value
-        </p>
-        <p className="mt-2 text-2xl font-bold text-blue-900">
-          ${totalValue.toLocaleString('en-US')}
-        </p>
-        <p className="mt-1 text-xs text-blue-600">
-          Estimated value of leads not yet converted or lost
-        </p>
       </div>
 
       {/* Leads table */}
@@ -378,9 +463,10 @@ function Leads() {
             aria-label="Filter leads by status"
           >
             <option value="All">All statuses</option>
+
             {statuses.map((status) => (
               <option key={status} value={status}>
-                {status}
+                {statusLabels[status]}
               </option>
             ))}
           </select>
@@ -388,92 +474,28 @@ function Leads() {
 
         {/* Table */}
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1000px] text-left">
+          <table className="w-full min-w-[950px] text-left">
             <thead className="bg-slate-50">
               <tr className="text-xs uppercase tracking-wide text-slate-500">
                 <th className="px-5 py-4 font-semibold">Lead</th>
                 <th className="px-5 py-4 font-semibold">Company</th>
                 <th className="px-5 py-4 font-semibold">Source</th>
                 <th className="px-5 py-4 font-semibold">Assigned To</th>
-                <th className="px-5 py-4 font-semibold">Value</th>
                 <th className="px-5 py-4 font-semibold">Status</th>
                 <th className="px-5 py-4 text-right font-semibold">Actions</th>
               </tr>
             </thead>
 
             <tbody className="divide-y divide-slate-100">
-              {paginatedLeads.map((lead) => (
-                <tr key={lead.id} className="hover:bg-slate-50">
-                  <td className="px-5 py-4">
-                    <p className="text-sm font-semibold text-slate-800">
-                      {lead.name}
-                    </p>
-                    <p className="mt-1 text-xs text-slate-400">
-                      {lead.email}
-                    </p>
-                  </td>
-
-                  <td className="px-5 py-4 text-sm text-slate-600">
-                    {lead.company}
-                  </td>
-
-                  <td className="px-5 py-4 text-sm text-slate-600">
-                    {lead.source}
-                  </td>
-
-                  <td className="px-5 py-4 text-sm text-slate-600">
-                    {lead.assignedTo}
-                  </td>
-
-                  <td className="px-5 py-4 text-sm font-medium text-slate-700">
-                    ${Number(lead.value).toLocaleString('en-US')}
-                  </td>
-
-                  <td className="px-5 py-4">
-                    <StatusBadge status={lead.status} />
-                  </td>
-
-                  <td className="px-5 py-4">
-                    <div className="flex justify-end gap-1">
-                      <ActionButton
-                        label="View lead"
-                        onClick={() => setSelectedLead(lead)}
-                      >
-                        <Eye size={17} />
-                      </ActionButton>
-
-                      <ActionButton
-                        label="Edit lead"
-                        onClick={() => openEditModal(lead)}
-                      >
-                        <Pencil size={17} />
-                      </ActionButton>
-
-                      {!['Converted', 'Lost'].includes(lead.status) && (
-                        <ActionButton
-                          label="Convert lead"
-                          onClick={() => handleConvert(lead)}
-                          success
-                        >
-                          <CheckCircle size={17} />
-                        </ActionButton>
-                      )}
-
-                      <ActionButton
-                        label="Delete lead"
-                        onClick={() => handleDelete(lead.id)}
-                        danger
-                      >
-                        <Trash2 size={17} />
-                      </ActionButton>
-                    </div>
+              {loading ? (
+                <tr>
+                  <td colSpan="6" className="px-5 py-12 text-center text-sm text-slate-500">
+                    Loading leads...
                   </td>
                 </tr>
-              ))}
-
-              {paginatedLeads.length === 0 && (
+              ) : filteredLeads.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className="px-5 py-12 text-center">
+                  <td colSpan="6" className="px-5 py-12 text-center">
                     <UserRoundPlus
                       size={30}
                       className="mx-auto mb-2 text-slate-300"
@@ -482,10 +504,75 @@ function Leads() {
                       No leads found
                     </p>
                     <p className="mt-1 text-xs text-slate-400">
-                      Try changing your search or filters.
+                      Try changing your search or filters, or add a lead.
                     </p>
                   </td>
                 </tr>
+              ) : (
+                filteredLeads.map((lead) => (
+                  <tr key={lead.id} className="hover:bg-slate-50">
+                    <td className="px-5 py-4">
+                      <p className="text-sm font-semibold text-slate-800">
+                        {lead.name}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-400">
+                        {lead.email}
+                      </p>
+                    </td>
+
+                    <td className="px-5 py-4 text-sm text-slate-600">
+                      {lead.company || '—'}
+                    </td>
+
+                    <td className="px-5 py-4 text-sm text-slate-600">
+                      {sourceLabels[lead.source] || lead.source || '—'}
+                    </td>
+
+                    <td className="px-5 py-4 text-sm text-slate-600">
+                      {lead.assignedTo}
+                    </td>
+
+                    <td className="px-5 py-4">
+                      <StatusBadge status={lead.status} />
+                    </td>
+
+                    <td className="px-5 py-4">
+                      <div className="flex justify-end gap-1">
+                        <ActionButton
+                          label="View lead"
+                          onClick={() => setSelectedLead(lead)}
+                        >
+                          <Eye size={17} />
+                        </ActionButton>
+
+                        <ActionButton
+                          label="Edit lead"
+                          onClick={() => openEditModal(lead)}
+                        >
+                          <Pencil size={17} />
+                        </ActionButton>
+
+                        {lead.status === 'QUALIFIED' && (
+                          <ActionButton
+                            label="Convert lead"
+                            onClick={() => handleConvert(lead)}
+                            success
+                          >
+                            <CheckCircle size={17} />
+                          </ActionButton>
+                        )}
+
+                        <ActionButton
+                          label="Delete lead"
+                          onClick={() => handleDelete(lead.id)}
+                          danger
+                        >
+                          <Trash2 size={17} />
+                        </ActionButton>
+                      </div>
+                    </td>
+                  </tr>
+                ))
               )}
             </tbody>
           </table>
@@ -494,14 +581,15 @@ function Leads() {
         {/* Pagination */}
         <div className="flex flex-col gap-3 border-t border-slate-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs text-slate-500">
-            Showing {filteredLeads.length === 0 ? 0 : (currentPage - 1) * pageSize + 1}
-            {' '}to {Math.min(currentPage * pageSize, filteredLeads.length)}
-            {' '}of {filteredLeads.length} leads
+            Showing {totalCount === 0 ? 0 : (currentPage - 1) * pageSize + 1}
+            {' '}to {Math.min(currentPage * pageSize, totalCount)}
+            {' '}of {totalCount} leads
           </p>
 
           <div className="flex items-center gap-2">
             <button
-              disabled={currentPage === 1}
+              type="button"
+              disabled={currentPage === 1 || loading}
               onClick={() => setCurrentPage((page) => page - 1)}
               className="rounded-lg border border-slate-200 p-2 text-slate-600 hover:bg-slate-50 disabled:opacity-40"
               aria-label="Previous page"
@@ -514,7 +602,8 @@ function Leads() {
             </span>
 
             <button
-              disabled={currentPage === totalPages}
+              type="button"
+              disabled={currentPage >= totalPages || loading}
               onClick={() => setCurrentPage((page) => page + 1)}
               className="rounded-lg border border-slate-200 p-2 text-slate-600 hover:bg-slate-50 disabled:opacity-40"
               aria-label="Next page"
@@ -535,6 +624,7 @@ function Leads() {
               </h2>
 
               <button
+                type="button"
                 onClick={closeModal}
                 className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"
                 aria-label="Close form"
@@ -544,14 +634,25 @@ function Leads() {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4 p-5">
-              <LeadField
-                label="Full Name"
-                name="name"
-                value={form.name}
-                onChange={updateForm}
-                error={errors.name}
-                required
-              />
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <LeadField
+                  label="First Name"
+                  name="first_name"
+                  value={form.first_name}
+                  onChange={updateForm}
+                  error={errors.first_name}
+                  required
+                />
+
+                <LeadField
+                  label="Last Name"
+                  name="last_name"
+                  value={form.last_name}
+                  onChange={updateForm}
+                  error={errors.last_name}
+                  required
+                />
+              </div>
 
               <LeadField
                 label="Email Address"
@@ -568,8 +669,6 @@ function Leads() {
                 name="company"
                 value={form.company}
                 onChange={updateForm}
-                error={errors.company}
-                required
               />
 
               <LeadField
@@ -577,8 +676,6 @@ function Leads() {
                 name="phone"
                 value={form.phone}
                 onChange={updateForm}
-                error={errors.phone}
-                required
               />
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -587,7 +684,8 @@ function Leads() {
                   name="source"
                   value={form.source}
                   onChange={updateForm}
-                  options={['Website', 'Referral', 'Social Media', 'Other']}
+                  options={sources}
+                  labels={sourceLabels}
                 />
 
                 <LeadSelect
@@ -596,24 +694,7 @@ function Leads() {
                   value={form.status}
                   onChange={updateForm}
                   options={statuses}
-                />
-
-                <LeadSelect
-                  label="Assigned To"
-                  name="assignedTo"
-                  value={form.assignedTo}
-                  onChange={updateForm}
-                  options={['Admin User', 'Sales Employee']}
-                />
-
-                <LeadField
-                  label="Estimated Value ($)"
-                  name="value"
-                  type="number"
-                  value={form.value}
-                  onChange={updateForm}
-                error={errors.value}
-                  required
+                  labels={statusLabels}
                 />
               </div>
 
@@ -621,16 +702,22 @@ function Leads() {
                 <button
                   type="button"
                   onClick={closeModal}
-                  className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50"
+                  disabled={saving}
+                  className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50"
                 >
                   Cancel
                 </button>
 
                 <button
                   type="submit"
-                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                  disabled={saving}
+                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
                 >
-                  {editingLead ? 'Save Changes' : 'Add Lead'}
+                  {saving
+                    ? 'Saving...'
+                    : editingLead
+                      ? 'Save Changes'
+                      : 'Add Lead'}
                 </button>
               </div>
             </form>
@@ -640,14 +727,15 @@ function Leads() {
 
       {/* Lead details modal */}
       {selectedLead && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/40 p-4">
+          <div className="my-auto w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
             <div className="mb-5 flex items-center justify-between">
               <h2 className="text-lg font-semibold text-slate-800">
                 Lead Details
               </h2>
 
               <button
+                type="button"
                 onClick={() => setSelectedLead(null)}
                 className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"
                 aria-label="Close lead details"
@@ -660,38 +748,48 @@ function Leads() {
               {Object.entries({
                 Name: selectedLead.name,
                 Email: selectedLead.email,
-                Company: selectedLead.company,
-                Phone: selectedLead.phone,
-                Source: selectedLead.source,
-                Status: selectedLead.status,
+                Company: selectedLead.company || '—',
+                Phone: selectedLead.phone || '—',
+                Source:
+                  sourceLabels[selectedLead.source] ||
+                  selectedLead.source ||
+                  '—',
+                Status:
+                  statusLabels[selectedLead.status] ||
+                  selectedLead.status,
                 'Assigned To': selectedLead.assignedTo,
-                'Estimated Value': `$${Number(selectedLead.value).toLocaleString('en-US')}`,
               }).map(([label, value]) => (
                 <div key={label}>
                   <p className="text-xs font-medium uppercase text-slate-400">
                     {label}
                   </p>
-                  <p className="mt-1 text-sm text-slate-700">
+                  <p className="mt-1 break-words text-sm text-slate-700">
                     {value}
                   </p>
                 </div>
               ))}
             </div>
 
+            {selectedLead.status === 'QUALIFIED' && (
+              <button
+                type="button"
+                onClick={() => handleConvert(selectedLead)}
+                className="mt-5 w-full rounded-lg bg-green-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-green-700"
+              >
+                Convert to Customer
+              </button>
+            )}
+
             <button
+              type="button"
               onClick={() => setSelectedLead(null)}
-              className="mt-6 w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700"
+              className="mt-3 w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm text-slate-600 hover:bg-slate-50"
             >
               Close
             </button>
           </div>
         </div>
       )}
-
-      <p className="text-xs text-slate-400">
-        Lead records are illustrative sample data stored in local React state.
-        Conversion currently updates the lead status only.
-      </p>
     </div>
   )
 }
@@ -705,25 +803,34 @@ function SummaryCard({ title, value, description, icon: Icon, color }) {
           <Icon size={20} />
         </div>
       </div>
-      <p className="mt-3 text-2xl font-bold text-slate-800">{value}</p>
-      <p className="mt-1 text-xs text-slate-400">{description}</p>
+
+      <p className="mt-3 text-2xl font-bold text-slate-800">
+        {value}
+      </p>
+
+      <p className="mt-1 text-xs text-slate-400">
+        {description}
+      </p>
     </div>
   )
 }
 
 function StatusBadge({ status }) {
   const styles = {
-    New: 'bg-blue-50 text-blue-700',
-    Contacted: 'bg-purple-50 text-purple-700',
-    Qualified: 'bg-green-50 text-green-700',
-    Proposal: 'bg-amber-50 text-amber-700',
-    Converted: 'bg-emerald-100 text-emerald-700',
-    Lost: 'bg-red-50 text-red-700',
+    NEW: 'bg-blue-50 text-blue-700',
+    CONTACTED: 'bg-purple-50 text-purple-700',
+    QUALIFIED: 'bg-green-50 text-green-700',
+    UNQUALIFIED: 'bg-red-50 text-red-700',
+    CONVERTED: 'bg-emerald-100 text-emerald-700',
   }
 
   return (
-    <span className={`whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium ${styles[status] || 'bg-slate-100 text-slate-600'}`}>
-      {status}
+    <span
+      className={`whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium ${
+        styles[status] || 'bg-slate-100 text-slate-600'
+      }`}
+    >
+      {statusLabels[status] || status}
     </span>
   )
 }
@@ -772,14 +879,13 @@ function LeadField({
         className="mb-1.5 block text-sm font-medium text-slate-700"
       >
         {label}
+        {required && <span className="ml-1 text-red-500">*</span>}
       </label>
 
       <input
         id={name}
         name={name}
         type={type}
-        min={type === 'number' ? '0' : undefined}
-        step={type === 'number' ? '0.01' : undefined}
         value={value}
         onChange={onChange}
         required={required}
@@ -793,7 +899,10 @@ function LeadField({
       />
 
       {error && (
-        <p id={`${name}-error`} className="mt-1 text-xs text-red-600">
+        <p
+          id={`${name}-error`}
+          className="mt-1 text-xs text-red-600"
+        >
           {error}
         </p>
       )}
@@ -801,7 +910,14 @@ function LeadField({
   )
 }
 
-function LeadSelect({ label, name, value, onChange, options }) {
+function LeadSelect({
+  label,
+  name,
+  value,
+  onChange,
+  options,
+  labels,
+}) {
   return (
     <div>
       <label
@@ -820,7 +936,7 @@ function LeadSelect({ label, name, value, onChange, options }) {
       >
         {options.map((option) => (
           <option key={option} value={option}>
-            {option}
+            {labels[option] || option}
           </option>
         ))}
       </select>

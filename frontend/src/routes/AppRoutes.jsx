@@ -21,6 +21,7 @@ import Opportunities from '../pages/opportunities/Opportunities'
 import Activities from '../pages/activities/Activities'
 import Reports from '../pages/reports/Reports'
 import Users from '../pages/users/Users'
+import SettingsPage from '../pages/settings/Settings'
 
 const ALL_ROLES = [
   'Administrator',
@@ -48,6 +49,7 @@ function AppRoutes() {
 
           <Route element={<ProtectedRoute />}>
             <Route element={<DashboardLayout />}>
+            <Route path="/settings" element={<SettingsPage />} />
 
               <Route element={<ProtectedRoute allowedRoles={ALL_ROLES} />}>
                 <Route path="/dashboard" element={<Dashboard />} />
