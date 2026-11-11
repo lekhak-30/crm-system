@@ -51,10 +51,56 @@ const emptyForm = {
   opportunity: '',
 }
 
-function getList(response) {
-  const data = response.data
-  return Array.isArray(data) ? data : data?.results || []
+
+async function getAllPages(endpoint) {
+  const records = []
+  const visitedUrls = new Set()
+  let nextUrl = endpoint
+
+  while (nextUrl) {
+    if (visitedUrls.has(nextUrl)) {
+      throw new Error('Repeated pagination URL detected.')
+    }
+
+    visitedUrls.add(nextUrl)
+
+    // Validate absolute pagination URLs before making requests.
+    if (/^https?:\/\//i.test(nextUrl)) {
+      const apiBase = new URL(
+        api.defaults.baseURL,
+        window.location.origin
+      )
+      const pageUrl = new URL(nextUrl)
+
+      const basePath = apiBase.pathname.replace(/\/$/, '')
+
+      if (
+        pageUrl.origin !== apiBase.origin ||
+        !pageUrl.pathname.startsWith(`${basePath}/`)
+      ) {
+        throw new Error('Unexpected pagination URL returned by the API.')
+      }
+    }
+
+    const response = await api.get(nextUrl)
+    const data = response.data
+
+    if (Array.isArray(data)) {
+      records.push(...data)
+      break
+    }
+
+    if (!Array.isArray(data?.results)) {
+      throw new Error('Unexpected API response format.')
+    }
+
+    records.push(...data.results)
+    nextUrl = data.next
+  }
+
+  return records
 }
+
 
 function getErrorMessage(error) {
   const data = error.response?.data
@@ -153,33 +199,35 @@ function Activities() {
 
   const [form, setForm] = useState(emptyForm)
 
-  const loadData = useCallback(async () => {
-    setLoading(true)
-    setError('')
+  
+const loadData = useCallback(async () => {
+  setLoading(true)
+  setError('')
 
-    try {
-      const [
-        activityResponse,
-        customerResponse,
-        leadResponse,
-        opportunityResponse,
-      ] = await Promise.all([
-        api.get(ACTIVITY_URL),
-        api.get('/customers/'),
-        api.get('/leads/'),
-        api.get('/opportunities/'),
-      ])
+  try {
+    const [
+      allActivities,
+      allCustomers,
+      allLeads,
+      allOpportunities,
+    ] = await Promise.all([
+      getAllPages(ACTIVITY_URL),
+      getAllPages('/customers/'),
+      getAllPages('/leads/'),
+      getAllPages('/opportunities/'),
+    ])
 
-      setActivities(getList(activityResponse))
-      setCustomers(getList(customerResponse))
-      setLeads(getList(leadResponse))
-      setOpportunities(getList(opportunityResponse))
-    } catch (err) {
-      setError(getErrorMessage(err))
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+    setActivities(allActivities)
+    setCustomers(allCustomers)
+    setLeads(allLeads)
+    setOpportunities(allOpportunities)
+  } catch (err) {
+    setError(getErrorMessage(err))
+  } finally {
+    setLoading(false)
+  }
+}, [])
+
 
   useEffect(() => {
     loadData()

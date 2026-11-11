@@ -1,4 +1,5 @@
 
+from django.db import transaction
 from django.utils import timezone
 
 from rest_framework import filters, status, viewsets
@@ -41,6 +42,11 @@ class ActivityViewSet(viewsets.ModelViewSet):
 
     ordering = ["due_at", "-created_at"]
 
+    LOCKED_STATUSES = [
+        Activity.Status.COMPLETED,
+        Activity.Status.CANCELLED,
+    ]
+
     def get_queryset(self):
         user = self.request.user
 
@@ -52,26 +58,21 @@ class ActivityViewSet(viewsets.ModelViewSet):
             "created_by",
         )
 
-        if user.role in ["ADMIN", "SALES_MANAGER"]:
-            pass
-        else:
+        if user.role not in ["ADMIN", "SALES_MANAGER"]:
             queryset = queryset.filter(assigned_to=user)
 
-        # Optional activity type filter
         activity_type = self.request.query_params.get("activity_type")
         if activity_type:
             queryset = queryset.filter(
                 activity_type=activity_type.upper()
             )
 
-        # Optional status filter
         activity_status = self.request.query_params.get("status")
         if activity_status:
             queryset = queryset.filter(
                 status=activity_status.upper()
             )
 
-        # Overdue activities
         if self.request.query_params.get("overdue") == "true":
             queryset = queryset.filter(
                 due_at__lt=timezone.now(),
@@ -81,7 +82,6 @@ class ActivityViewSet(viewsets.ModelViewSet):
                 ],
             )
 
-        # Upcoming activities
         if self.request.query_params.get("upcoming") == "true":
             queryset = queryset.filter(
                 due_at__gte=timezone.now(),
@@ -105,7 +105,22 @@ class ActivityViewSet(viewsets.ModelViewSet):
             serializer.save(created_by=user)
 
     def perform_update(self, serializer):
+        activity = serializer.instance
+
+        if activity.status in self.LOCKED_STATUSES:
+            raise PermissionDenied(
+                "Completed or cancelled activities cannot be edited."
+            )
+
         serializer.save()
+
+    def perform_destroy(self, instance):
+        if instance.status in self.LOCKED_STATUSES:
+            raise PermissionDenied(
+                "Completed or cancelled activities cannot be deleted."
+            )
+
+        instance.delete()
 
     @action(
         detail=True,
@@ -113,35 +128,44 @@ class ActivityViewSet(viewsets.ModelViewSet):
         url_path="complete",
     )
     def complete(self, request, pk=None):
-        activity = self.get_object()
+        with transaction.atomic():
+            # First retrieve through the role-filtered queryset.
+            activity = self.get_object()
 
-        if activity.status == Activity.Status.COMPLETED:
-            return Response(
-                {"detail": "This activity is already completed."},
-                status=status.HTTP_400_BAD_REQUEST,
+            # Lock the database row while checking and updating its status.
+            activity = Activity.objects.select_for_update().get(
+                pk=activity.pk
             )
 
-        if activity.status == Activity.Status.CANCELLED:
-            return Response(
-                {"detail": "A cancelled activity cannot be completed."},
-                status=status.HTTP_400_BAD_REQUEST,
+            if activity.status == Activity.Status.COMPLETED:
+                return Response(
+                    {"detail": "This activity is already completed."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if activity.status == Activity.Status.CANCELLED:
+                return Response(
+                    {"detail": "A cancelled activity cannot be completed."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            activity.status = Activity.Status.COMPLETED
+            activity.completed_at = timezone.now()
+
+            activity.save(
+                update_fields=[
+                    "status",
+                    "completed_at",
+                    "updated_at",
+                ]
             )
 
-        activity.status = Activity.Status.COMPLETED
-        activity.completed_at = timezone.now()
-
-        activity.save(
-            update_fields=[
-                "status",
-                "completed_at",
-                "updated_at",
-            ]
-        )
-
-        return Response(
-            ActivitySerializer(
+            response_data = ActivitySerializer(
                 activity,
                 context={"request": request},
-            ).data,
+            ).data
+
+        return Response(
+            response_data,
             status=status.HTTP_200_OK,
         )

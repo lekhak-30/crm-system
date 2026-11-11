@@ -103,10 +103,32 @@ class Activity(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+   
     class Meta:
         ordering = ["due_at", "-created_at"]
         verbose_name = "Activity"
         verbose_name_plural = "Activities"
+
+        constraints = [
+            models.CheckConstraint(
+                condition=~(
+                    models.Q(
+                        customer__isnull=False,
+                        lead__isnull=False,
+                    )
+                    | models.Q(
+                        customer__isnull=False,
+                        opportunity__isnull=False,
+                    )
+                    | models.Q(
+                        lead__isnull=False,
+                        opportunity__isnull=False,
+                    )
+                ),
+                name="activity_only_one_crm_record",
+            ),
+        ]
+
 
     def clean(self):
         related_records = [

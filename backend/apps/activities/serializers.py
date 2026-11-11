@@ -20,6 +20,7 @@ class ActivitySerializer(serializers.ModelSerializer):
 
     customer_name = serializers.SerializerMethodField()
     lead_name = serializers.SerializerMethodField()
+
     opportunity_name = serializers.CharField(
         source="opportunity.title",
         read_only=True,
@@ -38,12 +39,6 @@ class ActivitySerializer(serializers.ModelSerializer):
             "updated_at",
         )
 
-    def get_customer_name(self, obj)-> str | None:
-        return str(obj.customer) if obj.customer else None
-
-    def get_lead_name(self, obj)-> str | None:
-        return str(obj.lead) if obj.lead else None
-
     def get_fields(self):
         fields = super().get_fields()
         request = self.context.get("request")
@@ -57,8 +52,23 @@ class ActivitySerializer(serializers.ModelSerializer):
 
         return fields
 
+    def get_customer_name(self, obj) -> str | None:
+        return str(obj.customer) if obj.customer else None
+
+    def get_lead_name(self, obj) -> str | None:
+        return str(obj.lead) if obj.lead else None
+
     def validate(self, attrs):
         instance = self.instance
+
+        # Completed and cancelled activities are immutable.
+        if instance and instance.status in [
+            Activity.Status.COMPLETED,
+            Activity.Status.CANCELLED,
+        ]:
+            raise serializers.ValidationError(
+                "Completed or cancelled activities cannot be modified."
+            )
 
         customer = attrs.get(
             "customer",
